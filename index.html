@@ -182,7 +182,7 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
     <nav class="tabs" id="main-tabs">
       <button data-tab="facturacion" class="active">Facturación</button>
       <button data-tab="tesoreria">Tesorería</button>
-      <button data-tab="maestro">Maestro</button>
+      <button data-tab="maestro">Contactos</button>
     </nav>
     <div class="topbar-actions">
       <button class="icon-btn" id="signout-btn" title="Cerrar sesión">⎋</button>
@@ -640,7 +640,7 @@ function renderMaestroTable(tableId, dict, tipo, withCategoria){
     });
     tr.querySelector('[data-edit]').addEventListener('click', ()=> openMaestroModal(tipo, id, item));
     tr.querySelector('[data-del]').addEventListener('click', ()=>{
-      if (confirm(`¿Eliminar "${item.nombre}" del maestro? Los movimientos ya importados no se borran.`)){
+      if (confirm(`¿Eliminar "${item.nombre}" de contactos? Los movimientos ya importados no se borran.`)){
         db.ref(`${maestroPathFor(tipo)}/${id}`).remove();
       }
     });
