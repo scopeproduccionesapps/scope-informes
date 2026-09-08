@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scope · Informes</title>
+<link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Scope%20Informes%22,%22short_name%22:%22Informes%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22}">
+<style>
+:root{
+  --ink:#1b2430;
+  --ink-soft:#4a5568;
+  --paper:#f6f4ef;
+  --panel:#ffffff;
+  --line:#e2ddd2;
+  --brand:#2f5d54;
+  --brand-dark:#1f3f38;
+  --brand-soft:#e4ede9;
+  --amber:#b5762a;
+  --amber-soft:#f5e9d8;
+  --red:#a3392f;
+  --red-soft:#f6e3e0;
+  --radius:10px;
+  font-size:15px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  line-height:1.45;
+}
+h1,h2,h3,h4{margin:0 0 .3em 0;font-weight:650;letter-spacing:-.01em;}
+button{font-family:inherit;cursor:pointer;}
+input,select,button,textarea{font-family:inherit;font-size:14px;}
+table{border-collapse:collapse;width:100%;}
+.hidden{display:none !important;}
+
+/* ---- Shell ---- */
+#app-shell{display:none;min-height:100vh;flex-direction:column;}
+#app-shell.ready{display:flex;}
+header.topbar{
+  background:var(--brand-dark);
+  color:#fff;
+  padding:12px 20px;
+  display:flex;align-items:center;gap:18px;
+  position:sticky;top:0;z-index:30;
+}
+header.topbar .brand{font-size:17px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;}
+header.topbar .brand small{display:block;font-weight:400;font-size:11px;opacity:.7;letter-spacing:.02em;}
+nav.tabs{display:flex;gap:4px;flex:1;overflow-x:auto;}
+nav.tabs button{
+  background:transparent;border:none;color:#cfd9d5;padding:9px 14px;border-radius:8px;
+  font-size:14px;font-weight:600;white-space:nowrap;
+}
+nav.tabs button.active{background:rgba(255,255,255,.14);color:#fff;}
+nav.tabs button:hover{color:#fff;}
+.topbar-actions{display:flex;align-items:center;gap:10px;}
+.topbar-actions img{width:28px;height:28px;border-radius:50%;}
+.icon-btn{
+  background:rgba(255,255,255,.1);border:none;color:#fff;width:32px;height:32px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;
+}
+.icon-btn:hover{background:rgba(255,255,255,.2);}
+
+main{flex:1;padding:22px;max-width:1280px;margin:0 auto;width:100%;}
+
+/* ---- Cards / panels ---- */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:18px;}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+.panel-head h2{font-size:16px;}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+
+.btn{
+  background:var(--brand);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;font-size:13.5px;
+}
+.btn:hover{background:var(--brand-dark);}
+.btn.secondary{background:var(--panel);color:var(--ink);border:1px solid var(--line);}
+.btn.secondary:hover{background:var(--paper);}
+.btn.danger{background:var(--red);}
+.btn.danger:hover{background:#7f2b23;}
+.btn.small{padding:5px 10px;font-size:12.5px;border-radius:6px;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:600;}
+.pill.servicios{background:var(--brand-soft);color:var(--brand-dark);}
+.pill.produccion{background:var(--amber-soft);color:var(--amber);}
+.pill.proveedor{background:#e6e6ee;color:#3d3d63;}
+.pill.otros{background:#eee;color:#555;}
+.pill.off{background:var(--red-soft);color:var(--red);}
+
+/* ---- Period navigator ---- */
+.period-nav{display:flex;align-items:center;gap:8px;}
+.period-nav button{background:var(--panel);border:1px solid var(--line);border-radius:8px;width:30px;height:30px;font-size:14px;}
+.period-nav .label{font-weight:700;min-width:150px;text-align:center;font-size:14.5px;}
+.view-toggle{display:flex;background:var(--paper);border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+.view-toggle button{background:transparent;border:none;padding:7px 13px;font-size:13px;font-weight:600;color:var(--ink-soft);}
+.view-toggle button.active{background:var(--brand);color:#fff;}
+
+/* ---- KPI grid ---- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px;}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;}
+.kpi .label{font-size:12px;color:var(--ink-soft);font-weight:600;margin-bottom:4px;}
+.kpi .value{font-size:22px;font-weight:750;letter-spacing:-.02em;}
+.kpi .sub{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+.kpi .sub.pos{color:var(--brand);}
+.kpi .sub.neg{color:var(--red);}
+
+/* ---- Tables ---- */
+table.data th{
+  text-align:left;font-size:11.5px;text-transform:none;color:var(--ink-soft);font-weight:650;
+  border-bottom:1px solid var(--line);padding:8px 10px;background:var(--paper);
+}
+table.data td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle;}
+table.data tbody tr:hover{background:#fafaf7;}
+table.data tr.inactive td{opacity:.45;text-decoration:line-through;}
+table.data td.num{text-align:right;font-variant-numeric:tabular-nums;}
+.table-wrap{overflow-x:auto;}
+
+.toggle{position:relative;display:inline-block;width:34px;height:19px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.toggle span{position:absolute;inset:0;background:#ccc;border-radius:20px;transition:.15s;}
+.toggle span:before{content:"";position:absolute;height:14px;width:14px;left:2.5px;top:2.5px;background:#fff;border-radius:50%;transition:.15s;}
+.toggle input:checked + span{background:var(--brand);}
+.toggle input:checked + span:before{transform:translateX(15px);}
+
+input.inline-num{width:110px;border:1px solid var(--line);border-radius:6px;padding:5px 7px;text-align:right;}
+select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px;}
+
+/* ---- Modal ---- */
+.modal-bg{position:fixed;inset:0;background:rgba(20,25,20,.45);display:flex;align-items:flex-start;justify-content:center;z-index:100;padding:30px 16px;overflow:auto;}
+.modal{background:#fff;border-radius:14px;max-width:960px;width:100%;padding:22px 24px;margin:auto;}
+.modal h3{font-size:17px;margin-bottom:14px;}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:12.5px;font-weight:650;color:var(--ink-soft);margin-bottom:4px;}
+.field input,.field textarea,.field select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;}
+.dropzone{
+  border:2px dashed var(--line);border-radius:12px;padding:28px;text-align:center;color:var(--ink-soft);
+  cursor:pointer;transition:.15s;
+}
+.dropzone:hover,.dropzone.drag{border-color:var(--brand);background:var(--brand-soft);}
+
+/* ---- Setup screen ---- */
+#setup-screen{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.setup-card{background:#fff;border-radius:16px;padding:32px;max-width:480px;width:100%;border:1px solid var(--line);}
+.setup-card h1{font-size:20px;color:var(--brand-dark);}
+.setup-card p{color:var(--ink-soft);font-size:13.5px;}
+.setup-card textarea{width:100%;min-height:140px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;padding:10px;border:1px solid var(--line);border-radius:8px;}
+
+.gsi-btn{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-weight:600;justify-content:center;width:100%;}
+.gsi-btn:hover{background:var(--paper);}
+
+.muted{color:var(--ink-soft);}
+.empty-state{padding:30px;text-align:center;color:var(--ink-soft);}
+.section-title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);margin:20px 0 8px;}
+.badge-dup{background:var(--amber-soft);color:var(--amber);font-size:11px;padding:2px 7px;border-radius:5px;font-weight:650;}
+.badge-new{background:var(--brand-soft);color:var(--brand-dark);font-size:11px;padding:2px 7px;border-radius:5px;font-weight:650;}
+.toast{
+  position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:11px 18px;border-radius:8px;
+  font-size:13.5px;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.2);
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== SETUP SCREEN (Firebase config first run) ===================== -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <h1>Configura la conexión</h1>
+    <p>Pega aquí el bloque de configuración de tu proyecto Firebase (Firebase Console → Configuración del proyecto → tu app web). Solo hace falta hacerlo una vez en este navegador.</p>
+    <textarea id="fb-config-input" placeholder='{"apiKey":"...","authDomain":"...","databaseURL":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
+    <p id="setup-error" style="color:#a3392f;display:none;font-size:13px;"></p>
+    <div style="margin-top:14px;">
+      <button class="btn" id="setup-save" style="width:100%;">Guardar y continuar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== LOGIN SCREEN ===================== -->
+<div id="login-screen" class="hidden" style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+  <div class="setup-card" style="text-align:center;">
+    <h1>Scope · Informes</h1>
+    <p>Inicia sesión con tu cuenta de Google para acceder a Facturación y Tesorería.</p>
+    <button class="gsi-btn" id="login-btn">Iniciar sesión con Google</button>
+    <p style="margin-top:14px;"><a href="#" id="reset-config-link" style="font-size:12px;color:var(--ink-soft);">Cambiar configuración de Firebase</a></p>
+  </div>
+</div>
+
+<!-- ===================== APP SHELL ===================== -->
+<div id="app-shell">
+  <header class="topbar">
+    <div class="brand">Scope · Informes<small>Facturación &amp; Tesorería</small></div>
+    <nav class="tabs" id="main-tabs">
+      <button data-tab="facturacion" class="active">Facturación</button>
+      <button data-tab="tesoreria">Tesorería</button>
+      <button data-tab="maestro">Maestro</button>
+    </nav>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="signout-btn" title="Cerrar sesión">⎋</button>
+      <img id="user-avatar" src="" alt="">
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ FACTURACIÓN TAB ============ -->
+    <section id="tab-facturacion" class="tab-panel">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="row">
+            <div class="view-toggle" data-scope="facturacion">
+              <button data-period="semana">Semanal</button>
+              <button data-period="mes" class="active">Mensual</button>
+              <button data-period="anio">Anual</button>
+            </div>
+            <div class="period-nav" data-scope="facturacion">
+              <button data-dir="-1">‹</button>
+              <div class="label" data-label></div>
+              <button data-dir="1">›</button>
+            </div>
+          </div>
+          <button class="btn" data-open-import="facturacion">Importar Excel</button>
+        </div>
+
+        <div class="kpis" id="fact-kpis"></div>
+
+        <div class="section-title">Desglose por cliente / proveedor</div>
+        <div class="table-wrap">
+          <table class="data" id="fact-breakdown-table">
+            <thead><tr><th>Tipo</th><th>Nombre</th><th class="num">Real</th><th class="num">Previsión</th><th class="num">Diferencia</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="section-title">Movimientos del periodo</div>
+        <div class="table-wrap">
+          <table class="data" id="fact-mov-table">
+            <thead><tr>
+              <th>Activo</th><th>Fecha</th><th>Nº</th><th>Origen</th><th>Cliente/Proveedor</th><th>Descripción</th>
+              <th class="num">Total</th><th>Estado</th><th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="fact-empty" class="empty-state hidden">No hay movimientos importados todavía para este periodo. Usa "Importar Excel" para cargar el listado de Holded.</div>
+      </div>
+    </section>
+
+    <!-- ============ TESORERÍA TAB ============ -->
+    <section id="tab-tesoreria" class="tab-panel hidden">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="row">
+            <div class="view-toggle" data-scope="tesoreria">
+              <button data-period="semana">Semanal</button>
+              <button data-period="mes" class="active">Mensual</button>
+              <button data-period="anio">Anual</button>
+            </div>
+            <div class="period-nav" data-scope="tesoreria">
+              <button data-dir="-1">‹</button>
+              <div class="label" data-label></div>
+              <button data-dir="1">›</button>
+            </div>
+          </div>
+          <button class="btn" data-open-import="tesoreria">Importar Excel</button>
+        </div>
+
+        <div class="kpis" id="tes-kpis"></div>
+
+        <div class="section-title">Desglose por cliente / proveedor</div>
+        <div class="table-wrap">
+          <table class="data" id="tes-breakdown-table">
+            <thead><tr><th>Tipo</th><th>Nombre</th><th class="num">Real</th><th class="num">Previsión</th><th class="num">Diferencia</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="section-title">Movimientos del periodo</div>
+        <div class="table-wrap">
+          <table class="data" id="tes-mov-table">
+            <thead><tr>
+              <th>Activo</th><th>Fecha</th><th>Origen</th><th>Cliente/Proveedor</th><th>Concepto</th>
+              <th class="num">Importe</th><th class="num">Saldo</th><th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="tes-empty" class="empty-state hidden">No hay movimientos importados todavía para este periodo. Usa "Importar Excel" para cargar el extracto o libro de caja de Holded.</div>
+      </div>
+    </section>
+
+    <!-- ============ MAESTRO TAB ============ -->
+    <section id="tab-maestro" class="tab-panel hidden">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Clientes</h2>
+          <button class="btn" data-add="cliente">+ Añadir cliente</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="maestro-clientes-table">
+            <thead><tr><th>Activo</th><th>Nombre</th><th>Categoría</th><th class="num">Previsión mensual</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Proveedores</h2>
+          <button class="btn" data-add="proveedor">+ Añadir proveedor</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="maestro-proveedores-table">
+            <thead><tr><th>Activo</th><th>Nombre</th><th class="num">Previsión mensual</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Otros</h2>
+          <button class="btn" data-add="otro">+ Añadir</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="maestro-otros-table">
+            <thead><tr><th>Activo</th><th>Nombre</th><th class="num">Previsión mensual</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ===================== IMPORT MODAL ===================== -->
+<div class="modal-bg hidden" id="import-modal-bg">
+  <div class="modal" id="import-modal">
+    <h3 id="import-title">Importar Excel</h3>
+
+    <div id="import-step-drop">
+      <div class="dropzone" id="import-dropzone">
+        <div>Arrastra aquí el Excel exportado de Holded, o haz clic para elegirlo.</div>
+        <input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none;">
+      </div>
+    </div>
+
+    <div id="import-step-preview" class="hidden">
+      <p class="muted" id="import-summary"></p>
+      <div class="table-wrap" style="max-height:420px;overflow-y:auto;">
+        <table class="data" id="import-preview-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button class="btn secondary" id="import-cancel">Cancelar</button>
+        <button class="btn" id="import-confirm">Confirmar importación</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MAESTRO EDIT MODAL ===================== -->
+<div class="modal-bg hidden" id="maestro-modal-bg">
+  <div class="modal" style="max-width:420px;">
+    <h3 id="maestro-modal-title">Añadir</h3>
+    <div class="field">
+      <label>Nombre</label>
+      <input type="text" id="maestro-form-nombre">
+    </div>
+    <div class="field hidden" id="maestro-form-categoria-field">
+      <label>Categoría</label>
+      <select id="maestro-form-categoria">
+        <option value="servicios">Servicios</option>
+        <option value="produccion">Producción</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Previsión estimada mensual (€)</label>
+      <input type="number" step="0.01" id="maestro-form-prevision" value="0">
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="maestro-form-cancel">Cancelar</button>
+      <button class="btn" id="maestro-form-save">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+/* =========================================================================
+   SCOPE · INFORMES DE FACTURACIÓN Y TESORERÍA
+   App de una sola página. Firebase Realtime Database + Google Sign-In.
+   Estructura de datos en /:
+     maestro/clientes/{id}    {nombre, categoria:'servicios'|'produccion', prevision, activo}
+     maestro/proveedores/{id} {nombre, prevision, activo}
+     maestro/otros/{id}       {nombre, prevision, activo}
+     facturacion/{id}         movimiento de factura (ver mapFacturaRow)
+     tesoreria/{id}           movimiento de cobro/pago (ver mapTesoreriaRow)
+   ========================================================================= */
+
+let db, auth, currentUser = null;
+let maestro = { clientes:{}, proveedores:{}, otros:{} };
+let facturaciones = {};
+let tesorerias = {};
+
+/* ---------------- Utilidades generales ---------------- */
+
+function toast(msg){
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(()=>el.remove(), 3200);
+}
+
+function euros(n){
+  n = Number(n)||0;
+  return n.toLocaleString('es-ES',{style:'currency',currency:'EUR',maximumFractionDigits:2});
+}
+
+function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+// Convierte números con formato español ("1.213,33€", "1213,33", 1213.33) a Number
+function parseEsNumber(v){
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim().replace(/[€\s]/g,'');
+  if (s === '' || s === '-') return 0;
+  // Si tiene coma decimal, quitamos puntos de miles y cambiamos coma por punto
+  if (s.indexOf(',') > -1){
+    s = s.replace(/\./g,'').replace(',', '.');
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// Acepta Date de excel (numero serial), string dd/mm/yyyy o yyyy-mm-dd hh:mm:ss
+function parseExcelDate(v){
+  if (v instanceof Date) return v;
+  if (typeof v === 'number'){
+    // fecha serial de Excel
+    const utc = XLSX.SSF.parse_date_code(v);
+    if (utc) return new Date(utc.y, utc.m-1, utc.d, utc.H||0, utc.M||0, utc.S||0);
+  }
+  if (typeof v === 'string'){
+    const s = v.trim();
+    let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+  }
+  return null;
+}
+
+function fmtDate(d){
+  if (!d) return '—';
+  const dt = (d instanceof Date) ? d : new Date(d);
+  if (isNaN(dt)) return '—';
+  return dt.toLocaleDateString('es-ES');
+}
+
+function isoWeekKey(d){
+  const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = (dt.getUTCDay() + 6) % 7;
+  dt.setUTCDate(dt.getUTCDate() - day + 3);
+  const firstThursday = new Date(Date.UTC(dt.getUTCFullYear(),0,4));
+  const week = 1 + Math.round(((dt - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay()+6)%7)) / 7);
+  return dt.getUTCFullYear() + '-W' + String(week).padStart(2,'0');
+}
+function monthKey(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+function yearKey(d){ return String(d.getFullYear()); }
+
+function normalizeName(s){
+  return (s||'').toString().trim().toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ');
+}
+
+/* ---------------- Firebase setup / auth ---------------- */
+
+function initFirebase(cfg){
+  try{
+    firebase.initializeApp(cfg);
+    auth = firebase.auth();
+    db = firebase.database();
+    auth.onAuthStateChanged(onAuthChange);
+    document.getElementById('setup-screen').style.display = 'none';
+  }catch(e){
+    showSetupError('No se ha podido inicializar Firebase: ' + e.message);
+  }
+}
+
+function showSetupError(msg){
+  const el = document.getElementById('setup-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function boot(){
+  const saved = localStorage.getItem('scopeInformesFbConfig');
+  if (saved){
+    try{
+      const cfg = JSON.parse(saved);
+      initFirebase(cfg);
+      return;
+    }catch(e){ /* config corrupta, sigue a pantalla de setup */ }
+  }
+  document.getElementById('setup-screen').style.display = 'flex';
+}
+
+document.getElementById('setup-save').addEventListener('click', ()=>{
+  const raw = document.getElementById('fb-config-input').value.trim();
+  try{
+    const cfg = JSON.parse(raw);
+    if (!cfg.apiKey || !cfg.databaseURL){
+      showSetupError('Falta apiKey o databaseURL en la configuración.');
+      return;
+    }
+    localStorage.setItem('scopeInformesFbConfig', JSON.stringify(cfg));
+    initFirebase(cfg);
+  }catch(e){
+    showSetupError('El texto pegado no es un JSON válido. Copia exactamente el bloque de Firebase.');
+  }
+});
+
+document.getElementById('reset-config-link').addEventListener('click', (e)=>{
+  e.preventDefault();
+  localStorage.removeItem('scopeInformesFbConfig');
+  location.reload();
+});
+
+document.getElementById('login-btn').addEventListener('click', ()=>{
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(e=> toast('Error al iniciar sesión: '+e.message));
+});
+document.getElementById('signout-btn').addEventListener('click', ()=> auth.signOut());
+
+function onAuthChange(user){
+  currentUser = user;
+  if (user){
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app-shell').classList.add('ready');
+    document.getElementById('user-avatar').src = user.photoURL || '';
+    attachListeners();
+  } else {
+    document.getElementById('app-shell').classList.remove('ready');
+    document.getElementById('login-screen').classList.remove('hidden');
+  }
+}
+
+/* ---------------- Listeners de datos ---------------- */
+
+function attachListeners(){
+  db.ref('maestro/clientes').on('value', s=>{ maestro.clientes = s.val()||{}; renderMaestro(); renderFacturacion(); renderTesoreria(); });
+  db.ref('maestro/proveedores').on('value', s=>{ maestro.proveedores = s.val()||{}; renderMaestro(); renderFacturacion(); renderTesoreria(); });
+  db.ref('maestro/otros').on('value', s=>{ maestro.otros = s.val()||{}; renderMaestro(); renderFacturacion(); renderTesoreria(); });
+  db.ref('facturacion').on('value', s=>{ facturaciones = s.val()||{}; renderFacturacion(); });
+  db.ref('tesoreria').on('value', s=>{ tesorerias = s.val()||{}; renderTesoreria(); });
+}
+
+/* ---------------- Navegación de pestañas ---------------- */
+
+document.getElementById('main-tabs').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-tab]');
+  if (!btn) return;
+  document.querySelectorAll('#main-tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.add('hidden'));
+  document.getElementById('tab-'+btn.dataset.tab).classList.remove('hidden');
+});
+
+/* ---------------- Estado de navegador de periodo ---------------- */
+
+const periodState = {
+  facturacion: { mode:'mes', ref:new Date() },
+  tesoreria:   { mode:'mes', ref:new Date() }
+};
+
+document.querySelectorAll('.view-toggle').forEach(vt=>{
+  vt.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-period]');
+    if (!btn) return;
+    const scope = vt.dataset.scope;
+    vt.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    periodState[scope].mode = btn.dataset.period;
+    renderScope(scope);
+  });
+});
+
+document.querySelectorAll('.period-nav').forEach(nav=>{
+  nav.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-dir]');
+    if (!btn) return;
+    const scope = nav.dataset.scope;
+    const st = periodState[scope];
+    const d = new Date(st.ref);
+    const dir = +btn.dataset.dir;
+    if (st.mode === 'semana') d.setDate(d.getDate() + dir*7);
+    else if (st.mode === 'mes') d.setMonth(d.getMonth() + dir);
+    else d.setFullYear(d.getFullYear() + dir);
+    st.ref = d;
+    renderScope(scope);
+  });
+});
+
+function renderScope(scope){
+  if (scope === 'facturacion') renderFacturacion();
+  else renderTesoreria();
+}
+
+function periodLabel(st){
+  const d = st.ref;
+  if (st.mode === 'semana') return isoWeekKey(d).replace('-W',' · semana ');
+  if (st.mode === 'mes') return d.toLocaleDateString('es-ES',{month:'long',year:'numeric'});
+  return d.getFullYear().toString();
+}
+
+function periodMatches(st, date){
+  if (!date) return false;
+  if (st.mode === 'semana') return isoWeekKey(date) === isoWeekKey(st.ref);
+  if (st.mode === 'mes') return monthKey(date) === monthKey(st.ref);
+  return yearKey(date) === yearKey(st.ref);
+}
+
+// Factor para prorratear una previsión mensual manual al periodo visualizado
+function periodFactor(mode){
+  if (mode === 'semana') return 12/52; // aprox. semanas por mes inverso
+  if (mode === 'mes') return 1;
+  return 12;
+}
+
+/* ---------------- MAESTRO: render y edición ---------------- */
+
+function renderMaestro(){
+  renderMaestroTable('maestro-clientes-table', maestro.clientes, 'cliente', true);
+  renderMaestroTable('maestro-proveedores-table', maestro.proveedores, 'proveedor', false);
+  renderMaestroTable('maestro-otros-table', maestro.otros, 'otro', false);
+}
+
+function maestroPathFor(tipo){
+  return tipo === 'cliente' ? 'maestro/clientes' : tipo === 'proveedor' ? 'maestro/proveedores' : 'maestro/otros';
+}
+
+function renderMaestroTable(tableId, dict, tipo, withCategoria){
+  const tbody = document.querySelector('#'+tableId+' tbody');
+  tbody.innerHTML = '';
+  const entries = Object.entries(dict||{}).sort((a,b)=> (a[1].nombre||'').localeCompare(b[1].nombre||''));
+  if (entries.length === 0){
+    tbody.innerHTML = `<tr><td colspan="${withCategoria?5:4}" class="empty-state">Todavía no hay ninguno. Añádelo con el botón de arriba.</td></tr>`;
+    return;
+  }
+  for (const [id, item] of entries){
+    const tr = document.createElement('tr');
+    if (item.activo === false) tr.classList.add('inactive');
+    tr.innerHTML = `
+      <td><label class="toggle"><input type="checkbox" ${item.activo!==false?'checked':''} data-toggle-activo><span></span></label></td>
+      <td>${escapeHtml(item.nombre||'')}</td>
+      ${withCategoria ? `<td><span class="pill ${item.categoria==='produccion'?'produccion':'servicios'}">${item.categoria==='produccion'?'Producción':'Servicios'}</span></td>` : ''}
+      <td class="num">${euros(item.prevision||0)}</td>
+      <td class="row" style="justify-content:flex-end;gap:6px;">
+        <button class="btn secondary small" data-edit>Editar</button>
+        <button class="btn danger small" data-del>Eliminar</button>
+      </td>`;
+    tr.querySelector('[data-toggle-activo]').addEventListener('change', (e)=>{
+      db.ref(`${maestroPathFor(tipo)}/${id}/activo`).set(e.target.checked);
+    });
+    tr.querySelector('[data-edit]').addEventListener('click', ()=> openMaestroModal(tipo, id, item));
+    tr.querySelector('[data-del]').addEventListener('click', ()=>{
+      if (confirm(`¿Eliminar "${item.nombre}" del maestro? Los movimientos ya importados no se borran.`)){
+        db.ref(`${maestroPathFor(tipo)}/${id}`).remove();
+      }
+    });
+    tbody.appendChild(tr);
+  }
+}
+
+document.querySelectorAll('[data-add]').forEach(b=>{
+  b.addEventListener('click', ()=> openMaestroModal(b.dataset.add, null, {}));
+});
+
+let maestroModalTipo = null, maestroModalId = null;
+function openMaestroModal(tipo, id, item){
+  maestroModalTipo = tipo; maestroModalId = id;
+  document.getElementById('maestro-modal-title').textContent = id ? 'Editar' : 'Añadir';
+  document.getElementById('maestro-form-nombre').value = item.nombre || '';
+  document.getElementById('maestro-form-prevision').value = item.prevision || 0;
+  const catField = document.getElementById('maestro-form-categoria-field');
+  if (tipo === 'cliente'){
+    catField.classList.remove('hidden');
+    document.getElementById('maestro-form-categoria').value = item.categoria || 'servicios';
+  } else {
+    catField.classList.add('hidden');
+  }
+  document.getElementById('maestro-modal-bg').classList.remove('hidden');
+}
+document.getElementById('maestro-form-cancel').addEventListener('click', ()=> document.getElementById('maestro-modal-bg').classList.add('hidden'));
+document.getElementById('maestro-form-save').addEventListener('click', ()=>{
+  const nombre = document.getElementById('maestro-form-nombre').value.trim();
+  if (!nombre){ toast('Escribe un nombre.'); return; }
+  const data = {
+    nombre,
+    prevision: parseFloat(document.getElementById('maestro-form-prevision').value)||0,
+    activo: true
+  };
+  if (maestroModalTipo === 'cliente') data.categoria = document.getElementById('maestro-form-categoria').value;
+  const path = maestroPathFor(maestroModalTipo);
+  const id = maestroModalId || uid();
+  db.ref(`${path}/${id}`).update(data).then(()=>{
+    document.getElementById('maestro-modal-bg').classList.add('hidden');
+    toast('Guardado.');
+  });
+});
+
+// Busca en el maestro una coincidencia por nombre normalizado. Devuelve {tipo,id} o null.
+function findMaestroMatch(nombreOriginal){
+  const target = normalizeName(nombreOriginal);
+  if (!target) return null;
+  for (const tipo of ['clientes','proveedores','otros']){
+    for (const [id, item] of Object.entries(maestro[tipo]||{})){
+      if (normalizeName(item.nombre) === target) return { tipo: tipo.slice(0,-1) === 'otro' ? 'otro' : tipo.slice(0,-1), id };
+    }
+  }
+  return null;
+}
+function maestroLabel(tipo, id){
+  const dict = tipo==='cliente'?maestro.clientes:tipo==='proveedor'?maestro.proveedores:maestro.otros;
+  return dict && dict[id] ? dict[id].nombre : '(sin asignar)';
+}
+function maestroItem(tipo, id){
+  const dict = tipo==='cliente'?maestro.clientes:tipo==='proveedor'?maestro.proveedores:maestro.otros;
+  return dict ? dict[id] : null;
+}
+
+function escapeHtml(s){
+  return (s===null||s===undefined?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* =========================================================================
+   FACTURACIÓN
+   ========================================================================= */
+
+function renderFacturacion(){
+  const st = periodState.facturacion;
+  document.querySelectorAll('.period-nav[data-scope="facturacion"] .label')[0].textContent = periodLabel(st);
+
+  const movs = Object.entries(facturaciones).filter(([id,m]) => periodMatches(st, m.fecha ? new Date(m.fecha) : null));
+
+  // KPIs
+  let ingresos = 0, gastos = 0;
+  const activos = movs.filter(([id,m]) => m.activo !== false);
+  activos.forEach(([id,m])=>{
+    if (m.origen === 'venta') ingresos += Number(m.total)||0;
+    else gastos += Number(m.total)||0;
+  });
+
+  const factor = periodFactor(st.mode);
+  let previsionIngresos = 0, previsionGastos = 0;
+  Object.values(maestro.clientes||{}).forEach(c=>{ if(c.activo!==false) previsionIngresos += (c.prevision||0)*factor; });
+  Object.values(maestro.otros||{}).forEach(o=>{ if(o.activo!==false) previsionIngresos += 0; }); // otros se reparte abajo por movimiento real, no se prorratea aparte
+  Object.values(maestro.proveedores||{}).forEach(p=>{ if(p.activo!==false) previsionGastos += (p.prevision||0)*factor; });
+
+  const kpis = document.getElementById('fact-kpis');
+  kpis.innerHTML = '';
+  kpis.appendChild(kpiCard('Ingresos (real)', euros(ingresos)));
+  kpis.appendChild(kpiCard('Previsión ingresos', euros(previsionIngresos), diffSub(ingresos, previsionIngresos)));
+  kpis.appendChild(kpiCard('Gastos (real)', euros(gastos)));
+  kpis.appendChild(kpiCard('Previsión gastos', euros(previsionGastos), diffSub(gastos, previsionGastos, true)));
+  kpis.appendChild(kpiCard('Resultado real', euros(ingresos-gastos)));
+
+  // Desglose por contraparte
+  const breakdown = {}; // key -> {tipo,label,real,prevision}
+  activos.forEach(([id,m])=>{
+    const key = (m.contraparteTipo||'otro')+'|'+(m.contraparteId||'sin-asignar');
+    if (!breakdown[key]){
+      const item = m.contraparteId ? maestroItem(m.contraparteTipo, m.contraparteId) : null;
+      breakdown[key] = {
+        tipo: m.contraparteTipo || 'otro',
+        categoria: item && item.categoria,
+        label: item ? item.nombre : (m.contraparteNombreOriginal || 'Sin asignar'),
+        real: 0, prevision: 0
+      };
+    }
+    breakdown[key].real += (m.origen==='venta' ? 1 : -1) * (Number(m.total)||0);
+  });
+  // añade previsión de cada entrada de maestro activa aunque no tenga movimientos aún
+  ['clientes','proveedores','otros'].forEach(grp=>{
+    const tipo = grp==='clientes'?'cliente':grp==='proveedores'?'proveedor':'otro';
+    Object.entries(maestro[grp]||{}).forEach(([id,item])=>{
+      if (item.activo===false) return;
+      const key = tipo+'|'+id;
+      if (!breakdown[key]) breakdown[key] = { tipo, categoria:item.categoria, label:item.nombre, real:0, prevision:0 };
+      breakdown[key].prevision = (item.prevision||0)*factor*(tipo==='proveedor'?-1:1);
+    });
+  });
+
+  renderBreakdownTable('fact-breakdown-table', breakdown);
+
+  // Tabla de movimientos
+  const tbody = document.querySelector('#fact-mov-table tbody');
+  tbody.innerHTML = '';
+  const sorted = movs.slice().sort((a,b)=> new Date(b[1].fecha) - new Date(a[1].fecha));
+  document.getElementById('fact-empty').classList.toggle('hidden', sorted.length>0);
+  sorted.forEach(([id,m])=>{
+    const tr = document.createElement('tr');
+    if (m.activo === false) tr.classList.add('inactive');
+    tr.innerHTML = `
+      <td><label class="toggle"><input type="checkbox" ${m.activo!==false?'checked':''} data-toggle><span></span></label></td>
+      <td>${fmtDate(m.fecha)}</td>
+      <td>${escapeHtml(m.num||'')}</td>
+      <td><span class="pill ${m.origen==='venta'?'servicios':'proveedor'}">${m.origen==='venta'?'Venta':'Compra'}</span></td>
+      <td>${contraparteSelectHtml(m.contraparteTipo, m.contraparteId, m.contraparteNombreOriginal)}</td>
+      <td>${escapeHtml(m.descripcion||'')}</td>
+      <td class="num">${euros(m.total)}</td>
+      <td>${escapeHtml(m.estado||'')}</td>
+      <td><button class="btn danger small" data-del>Eliminar</button></td>`;
+    tr.querySelector('[data-toggle]').addEventListener('change', e=> db.ref('facturacion/'+id+'/activo').set(e.target.checked));
+    tr.querySelector('[data-del]').addEventListener('click', ()=>{ if(confirm('¿Eliminar este movimiento importado?')) db.ref('facturacion/'+id).remove(); });
+    bindContraparteSelect(tr, 'facturacion', id);
+    tbody.appendChild(tr);
+  });
+}
+
+function kpiCard(label, value, sub){
+  const d = document.createElement('div');
+  d.className = 'kpi';
+  d.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>${sub?`<div class="sub ${sub.cls}">${sub.text}</div>`:''}`;
+  return d;
+}
+function diffSub(real, prevision, invert){
+  const diff = real - prevision;
+  const good = invert ? diff <= 0 : diff >= 0;
+  const sign = diff>=0?'+':'';
+  return { cls: good?'pos':'neg', text: sign+euros(diff)+' vs. previsión' };
+}
+
+function renderBreakdownTable(tableId, breakdown){
+  const tbody = document.querySelector('#'+tableId+' tbody');
+  tbody.innerHTML = '';
+  const rows = Object.values(breakdown).sort((a,b)=> Math.abs(b.real)-Math.abs(a.real));
+  if (rows.length===0){
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Sin datos en este periodo.</td></tr>`;
+    return;
+  }
+  rows.forEach(r=>{
+    const pillClass = r.tipo==='cliente' ? (r.categoria==='produccion'?'produccion':'servicios') : r.tipo==='proveedor'?'proveedor':'otros';
+    const pillText = r.tipo==='cliente' ? (r.categoria==='produccion'?'Cliente · Producción':'Cliente · Servicios') : r.tipo==='proveedor'?'Proveedor':'Otros';
+    const diff = r.real - r.prevision;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><span class="pill ${pillClass}">${pillText}</span></td>
+      <td>${escapeHtml(r.label)}</td>
+      <td class="num">${euros(r.real)}</td>
+      <td class="num">${euros(r.prevision)}</td>
+      <td class="num" style="color:${diff>=0?'var(--brand)':'var(--red)'}">${diff>=0?'+':''}${euros(diff)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// Genera el <select> inline para reasignar tipo+contraparte de un movimiento ya importado
+function contraparteSelectHtml(tipo, id, original){
+  return `<select class="inline-sel" data-cp-tipo>
+      <option value="cliente" ${tipo==='cliente'?'selected':''}>Cliente</option>
+      <option value="proveedor" ${tipo==='proveedor'?'selected':''}>Proveedor</option>
+      <option value="otro" ${tipo==='otro'?'selected':''}>Otros</option>
+    </select>
+    <select class="inline-sel" data-cp-id style="margin-top:3px;">${contraparteOptions(tipo, id, original)}</select>`;
+}
+function contraparteOptions(tipo, selectedId, original){
+  const dict = tipo==='cliente'?maestro.clientes:tipo==='proveedor'?maestro.proveedores:maestro.otros;
+  let html = `<option value="">${original?escapeHtml(original)+' (sin asignar)':'— elegir —'}</option>`;
+  Object.entries(dict||{}).sort((a,b)=>(a[1].nombre||'').localeCompare(b[1].nombre||'')).forEach(([id,item])=>{
+    html += `<option value="${id}" ${id===selectedId?'selected':''}>${escapeHtml(item.nombre)}</option>`;
+  });
+  return html;
+}
+function bindContraparteSelect(tr, collection, movId){
+  const tipoSel = tr.querySelector('[data-cp-tipo]');
+  const idSel = tr.querySelector('[data-cp-id]');
+  tipoSel.addEventListener('change', ()=>{
+    idSel.innerHTML = contraparteOptions(tipoSel.value, null, null);
+    db.ref(`${collection}/${movId}`).update({ contraparteTipo: tipoSel.value, contraparteId: null });
+  });
+  idSel.addEventListener('change', ()=>{
+    db.ref(`${collection}/${movId}`).update({ contraparteTipo: tipoSel.value, contraparteId: idSel.value || null });
+  });
+}
+
+/* =========================================================================
+   TESORERÍA
+   ========================================================================= */
+
+function renderTesoreria(){
+  const st = periodState.tesoreria;
+  document.querySelectorAll('.period-nav[data-scope="tesoreria"] .label')[0].textContent = periodLabel(st);
+
+  const movs = Object.entries(tesorerias).filter(([id,m]) => periodMatches(st, m.fecha ? new Date(m.fecha) : null));
+  const activos = movs.filter(([id,m]) => m.activo !== false);
+
+  let cobros = 0, pagos = 0;
+  activos.forEach(([id,m])=>{
+    const imp = Number(m.importe)||0;
+    if (imp >= 0) cobros += imp; else pagos += Math.abs(imp);
+  });
+
+  const factor = periodFactor(st.mode);
+  let previsionCobros = 0, previsionPagos = 0;
+  Object.values(maestro.clientes||{}).forEach(c=>{ if(c.activo!==false) previsionCobros += (c.prevision||0)*factor; });
+  Object.values(maestro.proveedores||{}).forEach(p=>{ if(p.activo!==false) previsionPagos += (p.prevision||0)*factor; });
+
+  // último saldo conocido del periodo (si el excel lo trae)
+  const conSaldo = activos.filter(([id,m])=> m.saldo !== undefined && m.saldo !== null).sort((a,b)=> new Date(a[1].fecha)-new Date(b[1].fecha));
+  const saldoFinal = conSaldo.length ? conSaldo[conSaldo.length-1][1].saldo : null;
+
+  const kpis = document.getElementById('tes-kpis');
+  kpis.innerHTML = '';
+  kpis.appendChild(kpiCard('Cobros (real)', euros(cobros)));
+  kpis.appendChild(kpiCard('Previsión cobros', euros(previsionCobros), diffSub(cobros, previsionCobros)));
+  kpis.appendChild(kpiCard('Pagos (real)', euros(pagos)));
+  kpis.appendChild(kpiCard('Previsión pagos', euros(previsionPagos), diffSub(pagos, previsionPagos, true)));
+  kpis.appendChild(kpiCard('Flujo neto', euros(cobros-pagos)));
+  if (saldoFinal !== null) kpis.appendChild(kpiCard('Saldo al cierre del periodo', euros(saldoFinal)));
+
+  const breakdown = {};
+  activos.forEach(([id,m])=>{
+    const key = (m.contraparteTipo||'otro')+'|'+(m.contraparteId||'sin-asignar');
+    if (!breakdown[key]){
+      const item = m.contraparteId ? maestroItem(m.contraparteTipo, m.contraparteId) : null;
+      breakdown[key] = { tipo: m.contraparteTipo||'otro', categoria: item && item.categoria, label: item?item.nombre:(m.contraparteNombreOriginal||'Sin asignar'), real:0, prevision:0 };
+    }
+    breakdown[key].real += Number(m.importe)||0;
+  });
+  ['clientes','proveedores'].forEach(grp=>{
+    const tipo = grp==='clientes'?'cliente':'proveedor';
+    Object.entries(maestro[grp]||{}).forEach(([id,item])=>{
+      if (item.activo===false) return;
+      const key = tipo+'|'+id;
+      if (!breakdown[key]) breakdown[key] = { tipo, categoria:item.categoria, label:item.nombre, real:0, prevision:0 };
+      breakdown[key].prevision = (item.prevision||0)*factor*(tipo==='proveedor'?-1:1);
+    });
+  });
+  renderBreakdownTable('tes-breakdown-table', breakdown);
+
+  const tbody = document.querySelector('#tes-mov-table tbody');
+  tbody.innerHTML = '';
+  const sorted = movs.slice().sort((a,b)=> new Date(b[1].fecha) - new Date(a[1].fecha));
+  document.getElementById('tes-empty').classList.toggle('hidden', sorted.length>0);
+  sorted.forEach(([id,m])=>{
+    const tr = document.createElement('tr');
+    if (m.activo === false) tr.classList.add('inactive');
+    tr.innerHTML = `
+      <td><label class="toggle"><input type="checkbox" ${m.activo!==false?'checked':''} data-toggle><span></span></label></td>
+      <td>${fmtDate(m.fecha)}</td>
+      <td><span class="pill otros">${m.origenFormato==='banco'?'Banco':'Caja'}</span></td>
+      <td>${contraparteSelectHtml(m.contraparteTipo, m.contraparteId, m.contraparteNombreOriginal)}</td>
+      <td>${escapeHtml(m.concepto||'')}</td>
+      <td class="num" style="color:${(m.importe||0)>=0?'var(--brand)':'var(--red)'}">${euros(m.importe)}</td>
+      <td class="num">${m.saldo!==undefined&&m.saldo!==null?euros(m.saldo):'—'}</td>
+      <td><button class="btn danger small" data-del>Eliminar</button></td>`;
+    tr.querySelector('[data-toggle]').addEventListener('change', e=> db.ref('tesoreria/'+id+'/activo').set(e.target.checked));
+    tr.querySelector('[data-del]').addEventListener('click', ()=>{ if(confirm('¿Eliminar este movimiento importado?')) db.ref('tesoreria/'+id).remove(); });
+    bindContraparteSelect(tr, 'tesoreria', id);
+    tbody.appendChild(tr);
+  });
+}
+
+/* =========================================================================
+   IMPORTACIÓN DE EXCEL
+   ========================================================================= */
+
+let importCtx = null; // { scope: 'facturacion'|'tesoreria', rows: [...] }
+
+document.querySelectorAll('[data-open-import]').forEach(b=>{
+  b.addEventListener('click', ()=> openImportModal(b.dataset.openImport));
+});
+document.getElementById('import-cancel').addEventListener('click', closeImportModal);
+
+function openImportModal(scope){
+  importCtx = { scope, rows: [] };
+  document.getElementById('import-title').textContent = scope === 'facturacion' ? 'Importar facturación (Holded)' : 'Importar tesorería (Holded)';
+  document.getElementById('import-step-drop').classList.remove('hidden');
+  document.getElementById('import-step-preview').classList.add('hidden');
+  document.getElementById('import-file-input').value = '';
+  document.getElementById('import-modal-bg').classList.remove('hidden');
+}
+function closeImportModal(){
+  document.getElementById('import-modal-bg').classList.add('hidden');
+  importCtx = null;
+}
+
+const dz = document.getElementById('import-dropzone');
+dz.addEventListener('click', ()=> document.getElementById('import-file-input').click());
+dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', ()=> dz.classList.remove('drag'));
+dz.addEventListener('drop', e=>{
+  e.preventDefault(); dz.classList.remove('drag');
+  if (e.dataTransfer.files[0]) handleImportFile(e.dataTransfer.files[0]);
+});
+document.getElementById('import-file-input').addEventListener('change', e=>{
+  if (e.target.files[0]) handleImportFile(e.target.files[0]);
+});
+
+function handleImportFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:false});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:true, defval:null});
+      if (importCtx.scope === 'facturacion') processFacturacionSheet(rows);
+      else processTesoreriaSheet(rows);
+    }catch(err){
+      toast('No se ha podido leer el Excel: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Busca la fila de cabecera: la primera fila con al menos 4 celdas no vacías
+// y que contenga una de las palabras clave típicas de Holded.
+function findHeaderRowIndex(rows, keywords){
+  for (let i=0;i<rows.length;i++){
+    const row = rows[i]||[];
+    const nonEmpty = row.filter(c=>c!==null && c!=='').length;
+    if (nonEmpty < 3) continue;
+    const joined = row.map(c=>normalizeName(c)).join('|');
+    if (keywords.some(k=> joined.includes(normalizeName(k)))) return i;
+  }
+  return -1;
+}
+
+function isFooterOrBlankRow(row){
+  if (!row) return true;
+  const nonEmpty = row.filter(c=>c!==null && c!=='').length;
+  if (nonEmpty === 0) return true;
+  const first = normalizeName(row[0]);
+  if (first.includes('INFORME CREADO AUTOMATICAMENTE')) return true;
+  return false;
+}
+
+/* -------- Facturación: detecta venta vs compra y mapea -------- */
+
+function processFacturacionSheet(rows){
+  const headerIdx = findHeaderRowIndex(rows, ['FECHA']);
+  if (headerIdx === -1){ toast('No se ha reconocido el formato del Excel.'); return; }
+  const header = rows[headerIdx].map(h=>normalizeName(h));
+  const isVenta = header.includes('CLIENTE');
+  const isCompra = header.includes('PROVEEDOR');
+  if (!isVenta && !isCompra){ toast('El Excel no parece de facturas de venta ni de compra.'); return; }
+  const origen = isVenta ? 'venta' : 'compra';
+  const col = name => header.indexOf(normalizeName(name));
+
+  const idxFecha = isVenta ? col('Fecha') : col('Fecha emisión');
+  const idxNum = col('Num');
+  const idxContraparte = isVenta ? col('Cliente') : col('Proveedor');
+  const idxDescripcion = col('Descripción');
+  const idxCuenta = col('Cuenta');
+  const idxProyecto = col('Proyecto');
+  const idxSubtotal = col('Subtotal');
+  const idxIva = col('IVA');
+  const idxRetencion = col('Retención');
+  const idxTotal = col('Total');
+  const idxEstado = col('Estado');
+  const idxVencimiento = col('Vencimiento');
+  const idxFechaCP = isVenta ? col('Fecha de cobro') : col('Fecha de pago');
+  const idxCobradoPagado = isVenta ? col('Cobrado') : col('Pagado');
+  const idxPendiente = col('Pendiente');
+
+  const parsed = [];
+  for (let i=headerIdx+1; i<rows.length; i++){
+    const row = rows[i];
+    if (isFooterOrBlankRow(row)) break;
+    const nombreOriginal = row[idxContraparte];
+    if (!nombreOriginal && !row[idxNum]) continue;
+    const fecha = parseExcelDate(row[idxFecha]);
+    const match = findMaestroMatch(nombreOriginal);
+    parsed.push({
+      key: origen+'|'+(row[idxNum]||''),
+      origen,
+      fecha: fecha ? fecha.toISOString() : null,
+      num: row[idxNum]||'',
+      vencimiento: idxVencimiento>-1 && row[idxVencimiento] ? (parseExcelDate(row[idxVencimiento])||{}).toISOString?.() : null,
+      contraparteNombreOriginal: nombreOriginal||'',
+      contraparteTipo: match ? match.tipo : 'otro',
+      contraparteId: match ? match.id : null,
+      descripcion: row[idxDescripcion]||'',
+      cuenta: idxCuenta>-1?row[idxCuenta]:'',
+      proyecto: idxProyecto>-1?row[idxProyecto]:'',
+      subtotal: parseEsNumber(row[idxSubtotal]),
+      iva: parseEsNumber(row[idxIva]),
+      retencion: parseEsNumber(row[idxRetencion]),
+      total: parseEsNumber(row[idxTotal]),
+      cobradoPagado: idxCobradoPagado>-1?parseEsNumber(row[idxCobradoPagado]):0,
+      pendiente: idxPendiente>-1?parseEsNumber(row[idxPendiente]):0,
+      estado: idxEstado>-1?row[idxEstado]:'',
+      activo: true,
+      _duplicado: !!facturaciones && Object.values(facturaciones).some(m=> m.origen===origen && String(m.num)===String(row[idxNum]))
+    });
+  }
+  showFacturacionPreview(parsed);
+}
+
+function showFacturacionPreview(rows){
+  importCtx.rows = rows;
+  document.getElementById('import-step-drop').classList.add('hidden');
+  document.getElementById('import-step-preview').classList.remove('hidden');
+  const dupes = rows.filter(r=>r._duplicado).length;
+  document.getElementById('import-summary').textContent =
+    `${rows.length} movimientos encontrados${dupes?`, ${dupes} ya estaban importados (desmarcados por defecto)`:''}. Revisa la asignación de cliente/proveedor antes de confirmar.`;
+
+  const thead = document.querySelector('#import-preview-table thead');
+  thead.innerHTML = `<tr><th>Importar</th><th>Fecha</th><th>Nº</th><th>Nombre en Holded</th><th>Asignar a</th><th class="num">Total</th></tr>`;
+  const tbody = document.querySelector('#import-preview-table tbody');
+  tbody.innerHTML = '';
+  rows.forEach((r,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" data-include ${r._duplicado?'':'checked'}></td>
+      <td>${fmtDate(r.fecha)} ${r._duplicado?'<span class="badge-dup">ya importado</span>':''}</td>
+      <td>${escapeHtml(r.num)}</td>
+      <td>${escapeHtml(r.contraparteNombreOriginal)}</td>
+      <td>${contraparteSelectHtml(r.contraparteTipo, r.contraparteId, null)}</td>
+      <td class="num">${euros(r.total)}</td>`;
+    tr.querySelector('[data-include]').addEventListener('change', e=> r._include = e.target.checked);
+    r._include = !r._duplicado;
+    const tipoSel = tr.querySelector('[data-cp-tipo]');
+    const idSel = tr.querySelector('[data-cp-id]');
+    tipoSel.addEventListener('change', ()=>{ idSel.innerHTML = contraparteOptions(tipoSel.value,null,null); r.contraparteTipo = tipoSel.value; r.contraparteId=null; });
+    idSel.addEventListener('change', ()=>{ r.contraparteId = idSel.value || null; });
+    tbody.appendChild(tr);
+  });
+}
+
+/* -------- Tesorería: detecta banco vs caja y mapea -------- */
+
+function processTesoreriaSheet(rows){
+  const headerIdx = findHeaderRowIndex(rows, ['FECHA']);
+  if (headerIdx === -1){ toast('No se ha reconocido el formato del Excel.'); return; }
+  const header = rows[headerIdx].map(h=>normalizeName(h));
+  const isBanco = header.includes('CONCILIADO') && header.includes('IMPORTE');
+  const isCaja = header.includes('DEBE') && header.includes('HABER');
+  if (!isBanco && !isCaja){ toast('El Excel no parece un extracto bancario ni un libro de caja de Holded.'); return; }
+  const col = name => header.indexOf(normalizeName(name));
+
+  const parsed = [];
+  if (isBanco){
+    const idxFecha = col('Fecha'), idxDesc = col('Descripción'), idxImporte = col('Importe'),
+          idxSaldo = col('Saldo'), idxEstado = col('Estado');
+    for (let i=headerIdx+1;i<rows.length;i++){
+      const row = rows[i];
+      if (isFooterOrBlankRow(row)) break;
+      if (row[idxFecha]===null && row[idxDesc]===null) continue;
+      const fecha = parseExcelDate(row[idxFecha]);
+      const importe = parseEsNumber(row[idxImporte]);
+      const saldo = idxSaldo>-1 ? parseEsNumber(row[idxSaldo]) : null;
+      const concepto = row[idxDesc]||'';
+      const match = findMaestroMatch(concepto); // heurística simple sobre el texto del concepto
+      parsed.push({
+        key: hashRow([fecha&&fecha.toISOString(), concepto, importe, saldo]),
+        origenFormato: 'banco',
+        fecha: fecha?fecha.toISOString():null,
+        concepto,
+        contraparteNombreOriginal: match ? '' : concepto,
+        contraparteTipo: match?match.tipo:'otro',
+        contraparteId: match?match.id:null,
+        importe, saldo,
+        estado: idxEstado>-1?row[idxEstado]:'',
+        activo: true,
+        _duplicado: Object.values(tesorerias||{}).some(m=> m.origenFormato==='banco' && m.fecha===(fecha?fecha.toISOString():null) && Number(m.importe)===importe && String(m.concepto)===String(concepto))
+      });
+    }
+  } else {
+    const idxFecha = col('Fecha'), idxTipo = col('Tipo'), idxDesc = col('Descripción'),
+          idxDebe = col('Debe'), idxHaber = col('Haber'), idxSaldo = col('Saldo'),
+          idxContrapartida = col('Nombre de la cuenta de contrapartida');
+    for (let i=headerIdx+1;i<rows.length;i++){
+      const row = rows[i];
+      if (isFooterOrBlankRow(row)) break;
+      if (row[idxFecha]===null && row[idxDesc]===null) continue;
+      const fecha = parseExcelDate(row[idxFecha]);
+      const debe = parseEsNumber(row[idxDebe]);
+      const haber = parseEsNumber(row[idxHaber]);
+      const importe = debe - haber;
+      const saldo = idxSaldo>-1 ? parseEsNumber(row[idxSaldo]) : null;
+      const tipo = idxTipo>-1?row[idxTipo]:'';
+      const contrapartidaNombre = idxContrapartida>-1 ? row[idxContrapartida] : '';
+      const match = findMaestroMatch(contrapartidaNombre);
+      const esApertura = normalizeName(tipo)==='APERTURA';
+      parsed.push({
+        key: hashRow([fecha&&fecha.toISOString(), row[idxDesc], importe, saldo]),
+        origenFormato: 'caja',
+        fecha: fecha?fecha.toISOString():null,
+        concepto: row[idxDesc]||'',
+        contraparteNombreOriginal: contrapartidaNombre||'',
+        contraparteTipo: match?match.tipo:'otro',
+        contraparteId: match?match.id:null,
+        importe, saldo,
+        estado: tipo,
+        activo: !esApertura,
+        _duplicado: Object.values(tesorerias||{}).some(m=> m.origenFormato==='caja' && m.fecha===(fecha?fecha.toISOString():null) && Number(m.importe)===importe && String(m.concepto)===String(row[idxDesc]))
+      });
+    }
+  }
+  showTesoreriaPreview(parsed);
+}
+
+function hashRow(parts){ return parts.map(p=>String(p)).join('~'); }
+
+function showTesoreriaPreview(rows){
+  importCtx.rows = rows;
+  document.getElementById('import-step-drop').classList.add('hidden');
+  document.getElementById('import-step-preview').classList.remove('hidden');
+  const dupes = rows.filter(r=>r._duplicado).length;
+  document.getElementById('import-summary').textContent =
+    `${rows.length} movimientos encontrados${dupes?`, ${dupes} ya estaban importados (desmarcados por defecto)`:''}. Las aperturas de caja se importan desactivadas por defecto.`;
+
+  const thead = document.querySelector('#import-preview-table thead');
+  thead.innerHTML = `<tr><th>Importar</th><th>Fecha</th><th>Concepto</th><th>Asignar a</th><th class="num">Importe</th></tr>`;
+  const tbody = document.querySelector('#import-preview-table tbody');
+  tbody.innerHTML = '';
+  rows.forEach((r)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" data-include ${r._duplicado?'':'checked'}></td>
+      <td>${fmtDate(r.fecha)} ${r._duplicado?'<span class="badge-dup">ya importado</span>':''}</td>
+      <td>${escapeHtml(r.concepto)}</td>
+      <td>${contraparteSelectHtml(r.contraparteTipo, r.contraparteId, r.contraparteNombreOriginal)}</td>
+      <td class="num">${euros(r.importe)}</td>`;
+    tr.querySelector('[data-include]').addEventListener('change', e=> r._include = e.target.checked);
+    r._include = !r._duplicado;
+    const tipoSel = tr.querySelector('[data-cp-tipo]');
+    const idSel = tr.querySelector('[data-cp-id]');
+    tipoSel.addEventListener('change', ()=>{ idSel.innerHTML = contraparteOptions(tipoSel.value,null,null); r.contraparteTipo = tipoSel.value; r.contraparteId=null; });
+    idSel.addEventListener('change', ()=>{ r.contraparteId = idSel.value || null; });
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById('import-confirm').addEventListener('click', ()=>{
+  if (!importCtx) return;
+  const path = importCtx.scope === 'facturacion' ? 'facturacion' : 'tesoreria';
+  const updates = {};
+  let count = 0;
+  importCtx.rows.forEach(r=>{
+    if (!r._include) return;
+    const clean = Object.assign({}, r);
+    delete clean._duplicado; delete clean._include; delete clean.key;
+    updates[path+'/'+uid()] = clean;
+    count++;
+  });
+  if (count === 0){ toast('No has seleccionado ningún movimiento para importar.'); return; }
+  db.ref().update(updates).then(()=>{
+    toast(`${count} movimientos importados.`);
+    closeImportModal();
+  }).catch(e=> toast('Error al importar: '+e.message));
+});
+
+/* ---------------- Arranque ---------------- */
+boot();
+</script>
+</body>
+</html>
