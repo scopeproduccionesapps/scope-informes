@@ -326,7 +326,15 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
   <div class="modal" id="import-modal">
     <h3 id="import-title">Importar Excel</h3>
 
-    <div id="import-step-drop">
+    <div id="import-step-facttipo" class="hidden">
+      <p class="muted">¿Qué tipo de facturas vas a importar?</p>
+      <div class="row" style="gap:12px;">
+        <button class="btn" data-facttipo="venta" style="flex:1;">Facturas emitidas (clientes)</button>
+        <button class="btn secondary" data-facttipo="compra" style="flex:1;">Facturas recibidas (proveedores)</button>
+      </div>
+    </div>
+
+    <div id="import-step-drop" class="hidden">
       <div class="dropzone" id="import-dropzone">
         <div>Arrastra aquí el Excel exportado de Holded, o haz clic para elegirlo.</div>
         <input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none;">
@@ -652,9 +660,9 @@ document.querySelectorAll('[data-add]').forEach(b=>{
   b.addEventListener('click', ()=> openMaestroModal(b.dataset.add, null, {}));
 });
 
-let maestroModalTipo = null, maestroModalId = null;
-function openMaestroModal(tipo, id, item){
-  maestroModalTipo = tipo; maestroModalId = id;
+let maestroModalTipo = null, maestroModalId = null, maestroModalCallback = null;
+function openMaestroModal(tipo, id, item, onSaved){
+  maestroModalTipo = tipo; maestroModalId = id; maestroModalCallback = onSaved || null;
   document.getElementById('maestro-modal-title').textContent = id ? 'Editar' : 'Añadir';
   document.getElementById('maestro-form-nombre').value = item.nombre || '';
   document.getElementById('maestro-form-prevision').value = item.prevision || 0;
@@ -666,8 +674,12 @@ function openMaestroModal(tipo, id, item){
     catField.classList.add('hidden');
   }
   document.getElementById('maestro-modal-bg').classList.remove('hidden');
+  document.getElementById('maestro-form-nombre').focus();
 }
-document.getElementById('maestro-form-cancel').addEventListener('click', ()=> document.getElementById('maestro-modal-bg').classList.add('hidden'));
+document.getElementById('maestro-form-cancel').addEventListener('click', ()=>{
+  maestroModalCallback = null;
+  document.getElementById('maestro-modal-bg').classList.add('hidden');
+});
 document.getElementById('maestro-form-save').addEventListener('click', ()=>{
   const nombre = document.getElementById('maestro-form-nombre').value.trim();
   if (!nombre){ toast('Escribe un nombre.'); return; }
@@ -682,6 +694,11 @@ document.getElementById('maestro-form-save').addEventListener('click', ()=>{
   db.ref(`${path}/${id}`).update(data).then(()=>{
     document.getElementById('maestro-modal-bg').classList.add('hidden');
     toast('Guardado.');
+    if (maestroModalCallback){
+      const cb = maestroModalCallback;
+      maestroModalCallback = null;
+      cb(maestroModalTipo, id);
+    }
   });
 });
 
@@ -777,19 +794,20 @@ function renderFacturacion(){
   sorted.forEach(([id,m])=>{
     const tr = document.createElement('tr');
     if (m.activo === false) tr.classList.add('inactive');
+    const tipoFijo = m.origen === 'venta' ? 'cliente' : 'proveedor';
     tr.innerHTML = `
       <td><label class="toggle"><input type="checkbox" ${m.activo!==false?'checked':''} data-toggle><span></span></label></td>
       <td>${fmtDate(m.fecha)}</td>
       <td>${escapeHtml(m.num||'')}</td>
       <td><span class="pill ${m.origen==='venta'?'servicios':'proveedor'}">${m.origen==='venta'?'Venta':'Compra'}</span></td>
-      <td>${contraparteSelectHtml(m.contraparteTipo, m.contraparteId, m.contraparteNombreOriginal)}</td>
+      <td>${counterpartSelectHtmlFixed(tipoFijo, m.contraparteTipo, m.contraparteId, m.contraparteNombreOriginal)}</td>
       <td>${escapeHtml(m.descripcion||'')}</td>
       <td class="num">${euros(m.total)}</td>
       <td>${escapeHtml(m.estado||'')}</td>
       <td><button class="btn danger small" data-del>Eliminar</button></td>`;
     tr.querySelector('[data-toggle]').addEventListener('change', e=> db.ref('facturacion/'+id+'/activo').set(e.target.checked));
     tr.querySelector('[data-del]').addEventListener('click', ()=>{ if(confirm('¿Eliminar este movimiento importado?')) db.ref('facturacion/'+id).remove(); });
-    bindContraparteSelect(tr, 'facturacion', id);
+    bindCounterpartSelectFixed(tr.querySelector('[data-cp-fixed]'), tipoFijo, (t,cid)=> db.ref('facturacion/'+id).update({ contraparteTipo:t, contraparteId:cid }));
     tbody.appendChild(tr);
   });
 }
@@ -855,6 +873,46 @@ function bindContraparteSelect(tr, collection, movId){
   });
   idSel.addEventListener('change', ()=>{
     db.ref(`${collection}/${movId}`).update({ contraparteTipo: tipoSel.value, contraparteId: idSel.value || null });
+  });
+}
+
+// ---- Selector único usado en Facturación: el tipo (cliente/proveedor) ya se conoce
+// por si la factura es emitida o recibida, así que solo hace falta elegir el nombre
+// concreto (o "Otros", o crear uno nuevo al vuelo).
+function counterpartOptionsFixed(tipoFijo, selectedTipo, selectedId, original){
+  const mainDict = tipoFijo === 'cliente' ? maestro.clientes : maestro.proveedores;
+  let html = `<option value="">${original?escapeHtml(original)+' (sin asignar)':'— elegir —'}</option>`;
+  html += `<optgroup label="${tipoFijo==='cliente'?'Clientes':'Proveedores'}">`;
+  Object.entries(mainDict||{}).sort((a,b)=>(a[1].nombre||'').localeCompare(b[1].nombre||'')).forEach(([id,item])=>{
+    html += `<option value="${tipoFijo}:${id}" ${(selectedTipo===tipoFijo && id===selectedId)?'selected':''}>${escapeHtml(item.nombre)}</option>`;
+  });
+  html += `</optgroup><optgroup label="Otros">`;
+  Object.entries(maestro.otros||{}).sort((a,b)=>(a[1].nombre||'').localeCompare(b[1].nombre||'')).forEach(([id,item])=>{
+    html += `<option value="otro:${id}" ${(selectedTipo==='otro' && id===selectedId)?'selected':''}>${escapeHtml(item.nombre)}</option>`;
+  });
+  html += `</optgroup>`;
+  html += `<option value="__nuevo__">+ Nuevo ${tipoFijo==='cliente'?'cliente':'proveedor'}</option>`;
+  return html;
+}
+function counterpartSelectHtmlFixed(tipoFijo, selectedTipo, selectedId, original){
+  return `<select class="inline-sel" data-cp-fixed data-tipo-fijo="${tipoFijo}">${counterpartOptionsFixed(tipoFijo, selectedTipo, selectedId, original)}</select>`;
+}
+// onChange(tipo, id) se llama con (null, null) si se deja "sin asignar"
+function bindCounterpartSelectFixed(selectEl, tipoFijo, onChange){
+  selectEl.addEventListener('change', ()=>{
+    const val = selectEl.value;
+    if (val === '__nuevo__'){
+      selectEl.value = '';
+      openMaestroModal(tipoFijo, null, {}, (savedTipo, newId)=>{
+        selectEl.innerHTML = counterpartOptionsFixed(tipoFijo, savedTipo, newId, null);
+        selectEl.value = `${savedTipo}:${newId}`;
+        onChange(savedTipo, newId);
+      });
+      return;
+    }
+    if (!val){ onChange(null, null); return; }
+    const sep = val.indexOf(':');
+    onChange(val.slice(0,sep), val.slice(sep+1));
   });
 }
 
@@ -948,13 +1006,28 @@ document.querySelectorAll('[data-open-import]').forEach(b=>{
 document.getElementById('import-cancel').addEventListener('click', closeImportModal);
 
 function openImportModal(scope){
-  importCtx = { scope, rows: [] };
+  importCtx = { scope, rows: [], facturaOrigen: null };
   document.getElementById('import-title').textContent = scope === 'facturacion' ? 'Importar facturación (Holded)' : 'Importar tesorería (Holded)';
-  document.getElementById('import-step-drop').classList.remove('hidden');
   document.getElementById('import-step-preview').classList.add('hidden');
   document.getElementById('import-file-input').value = '';
+  if (scope === 'facturacion'){
+    document.getElementById('import-step-facttipo').classList.remove('hidden');
+    document.getElementById('import-step-drop').classList.add('hidden');
+  } else {
+    document.getElementById('import-step-facttipo').classList.add('hidden');
+    document.getElementById('import-step-drop').classList.remove('hidden');
+  }
   document.getElementById('import-modal-bg').classList.remove('hidden');
 }
+document.querySelectorAll('[data-facttipo]').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    importCtx.facturaOrigen = b.dataset.facttipo;
+    document.getElementById('import-title').textContent =
+      'Importar facturación (Holded) · ' + (b.dataset.facttipo==='venta' ? 'facturas emitidas' : 'facturas recibidas');
+    document.getElementById('import-step-facttipo').classList.add('hidden');
+    document.getElementById('import-step-drop').classList.remove('hidden');
+  });
+});
 function closeImportModal(){
   document.getElementById('import-modal-bg').classList.add('hidden');
   importCtx = null;
@@ -1011,16 +1084,19 @@ function isFooterOrBlankRow(row){
   return false;
 }
 
-/* -------- Facturación: detecta venta vs compra y mapea -------- */
+/* -------- Facturación: usa el tipo elegido por el usuario (emitidas/recibidas) y mapea -------- */
 
 function processFacturacionSheet(rows){
   const headerIdx = findHeaderRowIndex(rows, ['FECHA']);
   if (headerIdx === -1){ toast('No se ha reconocido el formato del Excel.'); return; }
   const header = rows[headerIdx].map(h=>normalizeName(h));
-  const isVenta = header.includes('CLIENTE');
-  const isCompra = header.includes('PROVEEDOR');
-  if (!isVenta && !isCompra){ toast('El Excel no parece de facturas de venta ni de compra.'); return; }
-  const origen = isVenta ? 'venta' : 'compra';
+  const origen = importCtx.facturaOrigen; // 'venta' (emitidas) | 'compra' (recibidas)
+  const isVenta = origen === 'venta';
+  const expectedCol = isVenta ? 'CLIENTE' : 'PROVEEDOR';
+  if (!header.includes(expectedCol)){
+    toast(`Este Excel no tiene columna "${isVenta?'Cliente':'Proveedor'}" — comprueba que sea del tipo que has elegido.`);
+    return;
+  }
   const col = name => header.indexOf(normalizeName(name));
 
   const idxFecha = isVenta ? col('Fecha') : col('Fecha emisión');
@@ -1078,8 +1154,9 @@ function showFacturacionPreview(rows){
   document.getElementById('import-step-drop').classList.add('hidden');
   document.getElementById('import-step-preview').classList.remove('hidden');
   const dupes = rows.filter(r=>r._duplicado).length;
+  const tipoFijo = importCtx.facturaOrigen === 'venta' ? 'cliente' : 'proveedor';
   document.getElementById('import-summary').textContent =
-    `${rows.length} movimientos encontrados${dupes?`, ${dupes} ya estaban importados (desmarcados por defecto)`:''}. Revisa la asignación de cliente/proveedor antes de confirmar.`;
+    `${rows.length} movimientos encontrados${dupes?`, ${dupes} ya estaban importados (desmarcados por defecto)`:''}. Revisa la asignación de ${tipoFijo==='cliente'?'cliente':'proveedor'} antes de confirmar.`;
 
   const thead = document.querySelector('#import-preview-table thead');
   thead.innerHTML = `<tr><th>Importar</th><th>Fecha</th><th>Nº</th><th>Nombre en Holded</th><th>Asignar a</th><th class="num">Total</th></tr>`;
@@ -1092,14 +1169,11 @@ function showFacturacionPreview(rows){
       <td>${fmtDate(r.fecha)} ${r._duplicado?'<span class="badge-dup">ya importado</span>':''}</td>
       <td>${escapeHtml(r.num)}</td>
       <td>${escapeHtml(r.contraparteNombreOriginal)}</td>
-      <td>${contraparteSelectHtml(r.contraparteTipo, r.contraparteId, null)}</td>
+      <td>${counterpartSelectHtmlFixed(tipoFijo, r.contraparteTipo, r.contraparteId, null)}</td>
       <td class="num">${euros(r.total)}</td>`;
     tr.querySelector('[data-include]').addEventListener('change', e=> r._include = e.target.checked);
     r._include = !r._duplicado;
-    const tipoSel = tr.querySelector('[data-cp-tipo]');
-    const idSel = tr.querySelector('[data-cp-id]');
-    tipoSel.addEventListener('change', ()=>{ idSel.innerHTML = contraparteOptions(tipoSel.value,null,null); r.contraparteTipo = tipoSel.value; r.contraparteId=null; });
-    idSel.addEventListener('change', ()=>{ r.contraparteId = idSel.value || null; });
+    bindCounterpartSelectFixed(tr.querySelector('[data-cp-fixed]'), tipoFijo, (t,cid)=>{ r.contraparteTipo=t; r.contraparteId=cid; });
     tbody.appendChild(tr);
   });
 }
