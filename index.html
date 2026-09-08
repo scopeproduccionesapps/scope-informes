@@ -519,19 +519,33 @@ function boot(){
   document.getElementById('setup-screen').style.display = 'flex';
 }
 
+// Acepta tanto JSON puro como el fragmento de código que da Firebase Console
+// (const firebaseConfig = { apiKey: "...", ... };), extrayendo el objeto.
+function extractFirebaseConfig(raw){
+  try{ return JSON.parse(raw); }catch(e){ /* no es JSON puro, seguimos */ }
+  const m = raw.match(/{[\s\S]*}/);
+  if (!m) return null;
+  let block = m[0];
+  // pone comillas dobles a las claves sin comillas (apiKey: -> "apiKey":)
+  block = block.replace(/([{,]\s*)([A-Za-z0-9_]+)\s*:/g, '$1"$2":');
+  // quita comas finales antes de } o ]
+  block = block.replace(/,(\s*[}\]])/g, '$1');
+  try{ return JSON.parse(block); }catch(e){ return null; }
+}
+
 document.getElementById('setup-save').addEventListener('click', ()=>{
   const raw = document.getElementById('fb-config-input').value.trim();
-  try{
-    const cfg = JSON.parse(raw);
-    if (!cfg.apiKey || !cfg.databaseURL){
-      showSetupError('Falta apiKey o databaseURL en la configuración.');
-      return;
-    }
-    localStorage.setItem('scopeInformesFbConfig', JSON.stringify(cfg));
-    initFirebase(cfg);
-  }catch(e){
-    showSetupError('El texto pegado no es un JSON válido. Copia exactamente el bloque de Firebase.');
+  const cfg = extractFirebaseConfig(raw);
+  if (!cfg){
+    showSetupError('No se ha podido leer la configuración. Copia el bloque completo desde Firebase Console.');
+    return;
   }
+  if (!cfg.apiKey || !cfg.databaseURL){
+    showSetupError('Falta apiKey o databaseURL. Si falta databaseURL, primero crea la Realtime Database en Firebase Console y vuelve a copiar la configuración.');
+    return;
+  }
+  localStorage.setItem('scopeInformesFbConfig', JSON.stringify(cfg));
+  initFirebase(cfg);
 });
 
 document.getElementById('reset-config-link').addEventListener('click', (e)=>{
