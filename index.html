@@ -166,26 +166,12 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
 </head>
 <body>
 
-<!-- ===================== SETUP SCREEN (Firebase config first run) ===================== -->
-<div id="setup-screen">
-  <div class="setup-card">
-    <h1>Configura la conexión</h1>
-    <p>Pega aquí el bloque de configuración de tu proyecto Firebase (Firebase Console → Configuración del proyecto → tu app web). Solo hace falta hacerlo una vez en este navegador.</p>
-    <textarea id="fb-config-input" placeholder='{"apiKey":"...","authDomain":"...","databaseURL":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
-    <p id="setup-error" style="color:#a3392f;display:none;font-size:13px;"></p>
-    <div style="margin-top:14px;">
-      <button class="btn" id="setup-save" style="width:100%;">Guardar y continuar</button>
-    </div>
-  </div>
-</div>
-
 <!-- ===================== LOGIN SCREEN ===================== -->
 <div id="login-screen" class="hidden" style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
   <div class="setup-card" style="text-align:center;">
     <h1>Scope · Informes</h1>
     <p>Inicia sesión con tu cuenta de Google para acceder a Facturación y Tesorería.</p>
     <button class="gsi-btn" id="login-btn">Iniciar sesión con Google</button>
-    <p style="margin-top:14px;"><a href="#" id="reset-config-link" style="font-size:12px;color:var(--ink-soft);">Cambiar configuración de Firebase</a></p>
   </div>
 </div>
 
@@ -489,70 +475,32 @@ function normalizeName(s){
 
 /* ---------------- Firebase setup / auth ---------------- */
 
+// Configuración fija del proyecto Firebase de Scope Informes.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC6YQIRvAAWKf5hBuLURuuQcN8XfzETrVU",
+  authDomain: "informes-facturacion-tesoreria.firebaseapp.com",
+  databaseURL: "https://informes-facturacion-tesoreria-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "informes-facturacion-tesoreria",
+  storageBucket: "informes-facturacion-tesoreria.firebasestorage.app",
+  messagingSenderId: "383980347000",
+  appId: "1:383980347000:web:d843a705ff905567f7d78d"
+};
+
 function initFirebase(cfg){
   try{
     firebase.initializeApp(cfg);
     auth = firebase.auth();
     db = firebase.database();
     auth.onAuthStateChanged(onAuthChange);
-    document.getElementById('setup-screen').style.display = 'none';
   }catch(e){
-    showSetupError('No se ha podido inicializar Firebase: ' + e.message);
+    document.getElementById('login-screen').classList.remove('hidden');
+    toast('No se ha podido inicializar Firebase: ' + e.message);
   }
-}
-
-function showSetupError(msg){
-  const el = document.getElementById('setup-error');
-  el.textContent = msg;
-  el.style.display = 'block';
 }
 
 function boot(){
-  const saved = localStorage.getItem('scopeInformesFbConfig');
-  if (saved){
-    try{
-      const cfg = JSON.parse(saved);
-      initFirebase(cfg);
-      return;
-    }catch(e){ /* config corrupta, sigue a pantalla de setup */ }
-  }
-  document.getElementById('setup-screen').style.display = 'flex';
+  initFirebase(FIREBASE_CONFIG);
 }
-
-// Acepta tanto JSON puro como el fragmento de código que da Firebase Console
-// (const firebaseConfig = { apiKey: "...", ... };), extrayendo el objeto.
-function extractFirebaseConfig(raw){
-  try{ return JSON.parse(raw); }catch(e){ /* no es JSON puro, seguimos */ }
-  const m = raw.match(/{[\s\S]*}/);
-  if (!m) return null;
-  let block = m[0];
-  // pone comillas dobles a las claves sin comillas (apiKey: -> "apiKey":)
-  block = block.replace(/([{,]\s*)([A-Za-z0-9_]+)\s*:/g, '$1"$2":');
-  // quita comas finales antes de } o ]
-  block = block.replace(/,(\s*[}\]])/g, '$1');
-  try{ return JSON.parse(block); }catch(e){ return null; }
-}
-
-document.getElementById('setup-save').addEventListener('click', ()=>{
-  const raw = document.getElementById('fb-config-input').value.trim();
-  const cfg = extractFirebaseConfig(raw);
-  if (!cfg){
-    showSetupError('No se ha podido leer la configuración. Copia el bloque completo desde Firebase Console.');
-    return;
-  }
-  if (!cfg.apiKey || !cfg.databaseURL){
-    showSetupError('Falta apiKey o databaseURL. Si falta databaseURL, primero crea la Realtime Database en Firebase Console y vuelve a copiar la configuración.');
-    return;
-  }
-  localStorage.setItem('scopeInformesFbConfig', JSON.stringify(cfg));
-  initFirebase(cfg);
-});
-
-document.getElementById('reset-config-link').addEventListener('click', (e)=>{
-  e.preventDefault();
-  localStorage.removeItem('scopeInformesFbConfig');
-  location.reload();
-});
 
 document.getElementById('login-btn').addEventListener('click', ()=>{
   const provider = new firebase.auth.GoogleAuthProvider();
