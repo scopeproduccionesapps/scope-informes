@@ -249,6 +249,7 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
               <div class="label" data-label></div>
               <button data-dir="1">›</button>
             </div>
+            <select class="inline-sel" id="tes-cuenta-filter"><option value="todas">Todas las cuentas</option></select>
           </div>
           <button class="btn" data-open-import="tesoreria">Importar Excel</button>
         </div>
@@ -267,7 +268,7 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
         <div class="table-wrap">
           <table class="data" id="tes-mov-table">
             <thead><tr>
-              <th>Activo</th><th>Fecha</th><th>Origen</th><th>Cliente/Proveedor</th><th>Concepto</th>
+              <th>Activo</th><th>Fecha</th><th>Cuenta</th><th>Cliente/Proveedor</th><th>Concepto</th>
               <th class="num">Importe</th><th class="num">Saldo</th><th></th>
             </tr></thead>
             <tbody></tbody>
@@ -920,11 +921,29 @@ function bindCounterpartSelectFixed(selectEl, tipoFijo, onChange){
    TESORERÍA
    ========================================================================= */
 
+let tesoreriaCuentaFiltro = 'todas';
+document.getElementById('tes-cuenta-filter').addEventListener('change', (e)=>{
+  tesoreriaCuentaFiltro = e.target.value;
+  renderTesoreria();
+});
+
 function renderTesoreria(){
   const st = periodState.tesoreria;
   document.querySelectorAll('.period-nav[data-scope="tesoreria"] .label')[0].textContent = periodLabel(st);
 
-  const movs = Object.entries(tesorerias).filter(([id,m]) => periodMatches(st, m.fecha ? new Date(m.fecha) : null));
+  // Repuebla el desplegable de cuentas con las que haya en los datos, sin perder la selección actual
+  const cuentasDisponibles = Array.from(new Set(Object.values(tesorerias).map(m=>m.cuenta).filter(Boolean))).sort();
+  const cuentaSel = document.getElementById('tes-cuenta-filter');
+  const prevValue = cuentaSel.value;
+  cuentaSel.innerHTML = '<option value="todas">Todas las cuentas</option>' +
+    cuentasDisponibles.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if (cuentasDisponibles.includes(prevValue) || prevValue==='todas') cuentaSel.value = prevValue;
+  else tesoreriaCuentaFiltro = 'todas';
+
+  const movs = Object.entries(tesorerias).filter(([id,m]) =>
+    periodMatches(st, m.fecha ? new Date(m.fecha) : null) &&
+    (tesoreriaCuentaFiltro==='todas' || m.cuenta===tesoreriaCuentaFiltro)
+  );
   const activos = movs.filter(([id,m]) => m.activo !== false);
 
   let cobros = 0, pagos = 0;
@@ -949,7 +968,7 @@ function renderTesoreria(){
   kpis.appendChild(kpiCard('Pagos (real)', euros(pagos)));
   kpis.appendChild(kpiCard('Previsión pagos', euros(previsionPagos), diffSub(pagos, previsionPagos, true)));
   kpis.appendChild(kpiCard('Flujo neto', euros(cobros-pagos)));
-  if (saldoFinal !== null) kpis.appendChild(kpiCard('Saldo al cierre del periodo', euros(saldoFinal)));
+  if (saldoFinal !== null) kpis.appendChild(kpiCard(tesoreriaCuentaFiltro==='todas' ? 'Saldo al cierre (última cuenta con dato)' : 'Saldo al cierre del periodo', euros(saldoFinal)));
 
   const breakdown = {};
   activos.forEach(([id,m])=>{
@@ -981,7 +1000,7 @@ function renderTesoreria(){
     tr.innerHTML = `
       <td><label class="toggle"><input type="checkbox" ${m.activo!==false?'checked':''} data-toggle><span></span></label></td>
       <td>${fmtDate(m.fecha)}</td>
-      <td><span class="pill otros">${m.origenFormato==='banco'?'Banco':'Caja'}</span></td>
+      <td><span class="pill otros">${escapeHtml(m.cuenta||(m.origenFormato==='banco'?'Banco':'Caja'))}</span></td>
       <td>${contraparteSelectHtml(m.contraparteTipo, m.contraparteId, m.contraparteNombreOriginal)}</td>
       <td>${escapeHtml(m.concepto||'')}</td>
       <td class="num" style="color:${(m.importe||0)>=0?'var(--brand)':'var(--red)'}">${euros(m.importe)}</td>
@@ -1180,6 +1199,37 @@ function showFacturacionPreview(rows){
 
 /* -------- Tesorería: detecta banco vs caja y mapea -------- */
 
+// Detecta la cuenta/tarjeta a la que pertenece el extracto:
+// - Extracto bancario: el título de la hoja trae "Extracto bancario <NOMBRE DE LA CUENTA> dd/mm/aaaa-dd/mm/aaaa"
+// - Libro de caja: la columna "Nombre de la cuenta" es constante en todo el archivo (ej. "CAJA PRODUCCION GENERAL PROD.V")
+function detectCuentaBanco(rows, headerIdx){
+  for (let i=0;i<headerIdx;i++){
+    const row = rows[i]||[];
+    for (const cell of row){
+      if (cell === null || cell === undefined) continue;
+      const s = String(cell);
+      if (normalizeName(s).includes('EXTRACTO BANCARIO')){
+        const m = s.match(/extracto\s+banc[ao]rio\s+(.*?)\s*\d{1,2}\/\d{1,2}\/\d{2,4}\s*-\s*\d{1,2}\/\d{1,2}\/\d{2,4}\s*$/i);
+        if (m && m[1]) return m[1].trim();
+        // si no encaja el patrón de fechas al final, nos quedamos con lo que hay tras "Extracto bancario"
+        const m2 = s.match(/extracto\s+banc[ao]rio\s+(.*)$/i);
+        if (m2 && m2[1]) return m2[1].trim();
+      }
+    }
+  }
+  return '';
+}
+function detectCuentaCaja(rows, headerIdx, header){
+  const idxNombreCuenta = header.indexOf(normalizeName('Nombre de la cuenta'));
+  if (idxNombreCuenta === -1) return '';
+  for (let i=headerIdx+1;i<rows.length;i++){
+    const row = rows[i];
+    if (isFooterOrBlankRow(row)) break;
+    if (row[idxNombreCuenta]) return String(row[idxNombreCuenta]).trim();
+  }
+  return '';
+}
+
 function processTesoreriaSheet(rows){
   const headerIdx = findHeaderRowIndex(rows, ['FECHA']);
   if (headerIdx === -1){ toast('No se ha reconocido el formato del Excel.'); return; }
@@ -1188,6 +1238,8 @@ function processTesoreriaSheet(rows){
   const isCaja = header.includes('DEBE') && header.includes('HABER');
   if (!isBanco && !isCaja){ toast('El Excel no parece un extracto bancario ni un libro de caja de Holded.'); return; }
   const col = name => header.indexOf(normalizeName(name));
+  const cuenta = isBanco ? (detectCuentaBanco(rows, headerIdx) || 'Cuenta sin identificar')
+                          : (detectCuentaCaja(rows, headerIdx, header) || 'Caja sin identificar');
 
   const parsed = [];
   if (isBanco){
@@ -1203,8 +1255,9 @@ function processTesoreriaSheet(rows){
       const concepto = row[idxDesc]||'';
       const match = findMaestroMatch(concepto); // heurística simple sobre el texto del concepto
       parsed.push({
-        key: hashRow([fecha&&fecha.toISOString(), concepto, importe, saldo]),
+        key: hashRow([cuenta, fecha&&fecha.toISOString(), concepto, importe, saldo]),
         origenFormato: 'banco',
+        cuenta,
         fecha: fecha?fecha.toISOString():null,
         concepto,
         contraparteNombreOriginal: match ? '' : concepto,
@@ -1213,7 +1266,7 @@ function processTesoreriaSheet(rows){
         importe, saldo,
         estado: idxEstado>-1?row[idxEstado]:'',
         activo: true,
-        _duplicado: Object.values(tesorerias||{}).some(m=> m.origenFormato==='banco' && m.fecha===(fecha?fecha.toISOString():null) && Number(m.importe)===importe && String(m.concepto)===String(concepto))
+        _duplicado: Object.values(tesorerias||{}).some(m=> m.origenFormato==='banco' && m.cuenta===cuenta && m.fecha===(fecha?fecha.toISOString():null) && Number(m.importe)===importe && String(m.concepto)===String(concepto))
       });
     }
   } else {
@@ -1234,8 +1287,9 @@ function processTesoreriaSheet(rows){
       const match = findMaestroMatch(contrapartidaNombre);
       const esApertura = normalizeName(tipo)==='APERTURA';
       parsed.push({
-        key: hashRow([fecha&&fecha.toISOString(), row[idxDesc], importe, saldo]),
+        key: hashRow([cuenta, fecha&&fecha.toISOString(), row[idxDesc], importe, saldo]),
         origenFormato: 'caja',
+        cuenta,
         fecha: fecha?fecha.toISOString():null,
         concepto: row[idxDesc]||'',
         contraparteNombreOriginal: contrapartidaNombre||'',
@@ -1244,7 +1298,7 @@ function processTesoreriaSheet(rows){
         importe, saldo,
         estado: tipo,
         activo: !esApertura,
-        _duplicado: Object.values(tesorerias||{}).some(m=> m.origenFormato==='caja' && m.fecha===(fecha?fecha.toISOString():null) && Number(m.importe)===importe && String(m.concepto)===String(row[idxDesc]))
+        _duplicado: Object.values(tesorerias||{}).some(m=> m.origenFormato==='caja' && m.cuenta===cuenta && m.fecha===(fecha?fecha.toISOString():null) && Number(m.importe)===importe && String(m.concepto)===String(row[idxDesc]))
       });
     }
   }
@@ -1258,8 +1312,9 @@ function showTesoreriaPreview(rows){
   document.getElementById('import-step-drop').classList.add('hidden');
   document.getElementById('import-step-preview').classList.remove('hidden');
   const dupes = rows.filter(r=>r._duplicado).length;
+  const cuenta = rows.length ? rows[0].cuenta : '';
   document.getElementById('import-summary').textContent =
-    `${rows.length} movimientos encontrados${dupes?`, ${dupes} ya estaban importados (desmarcados por defecto)`:''}. Las aperturas de caja se importan desactivadas por defecto.`;
+    `Cuenta detectada: ${cuenta}. ${rows.length} movimientos encontrados${dupes?`, ${dupes} ya estaban importados (desmarcados por defecto)`:''}. Las aperturas de caja se importan desactivadas por defecto.`;
 
   const thead = document.querySelector('#import-preview-table thead');
   thead.innerHTML = `<tr><th>Importar</th><th>Fecha</th><th>Concepto</th><th>Asignar a</th><th class="num">Importe</th></tr>`;
