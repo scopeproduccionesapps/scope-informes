@@ -368,10 +368,7 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
     </div>
     <div class="field hidden" id="maestro-form-categoria-field">
       <label>Categoría</label>
-      <select id="maestro-form-categoria">
-        <option value="servicios">Servicios</option>
-        <option value="produccion">Producción</option>
-      </select>
+      <select id="maestro-form-categoria"></select>
     </div>
     <div class="field">
       <label>Previsión estimada mensual (€)</label>
@@ -380,6 +377,34 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
     <div class="modal-actions">
       <button class="btn secondary" id="maestro-form-cancel">Cancelar</button>
       <button class="btn" id="maestro-form-save">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== FUSIONAR CONTACTOS DUPLICADOS ===================== -->
+<div class="modal-bg hidden" id="merge-modal-bg">
+  <div class="modal" style="max-width:420px;">
+    <h3 id="merge-modal-title">Fusionar</h3>
+    <p class="muted">Todos sus movimientos importados (Facturación y Tesorería) pasarán al contacto que elijas, y la previsión mensual se sumará. Este contacto duplicado se eliminará.</p>
+    <div class="field">
+      <label>Fusionar con</label>
+      <select id="merge-target-select"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="merge-cancel">Cancelar</button>
+      <button class="btn" id="merge-confirm">Fusionar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== EDITAR MOVIMIENTO IMPORTADO ===================== -->
+<div class="modal-bg hidden" id="mov-edit-modal-bg">
+  <div class="modal" style="max-width:460px;">
+    <h3 id="mov-edit-title">Editar movimiento</h3>
+    <div id="mov-edit-fields"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="mov-edit-cancel">Cancelar</button>
+      <button class="btn" id="mov-edit-save">Guardar</button>
     </div>
   </div>
 </div>
@@ -407,6 +432,7 @@ let db, auth, currentUser = null;
 let maestro = { clientes:{}, proveedores:{}, otros:{} };
 let facturaciones = {};
 let tesorerias = {};
+let categoriasClientes = {}; // código -> etiqueta, ej. {servicios:'Servicios', produccion:'Producción'}
 
 /* ---------------- Utilidades generales ---------------- */
 
@@ -432,12 +458,17 @@ function parseEsNumber(v){
   if (typeof v === 'number') return v;
   let s = String(v).trim().replace(/[€\s]/g,'');
   if (s === '' || s === '-') return 0;
+  // Formato contable con paréntesis para negativos, ej. "(123,45)"
+  let negParen = false;
+  if (/^\(.*\)$/.test(s)){ negParen = true; s = s.slice(1,-1); }
   // Si tiene coma decimal, quitamos puntos de miles y cambiamos coma por punto
   if (s.indexOf(',') > -1){
     s = s.replace(/\./g,'').replace(',', '.');
   }
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
+  let n = parseFloat(s);
+  if (isNaN(n)) return 0;
+  if (negParen) n = -Math.abs(n);
+  return n;
 }
 
 // Acepta Date de excel (numero serial), string dd/mm/yyyy o yyyy-mm-dd hh:mm:ss
@@ -536,9 +567,78 @@ function attachListeners(){
   db.ref('maestro/clientes').on('value', s=>{ maestro.clientes = s.val()||{}; renderMaestro(); renderFacturacion(); renderTesoreria(); });
   db.ref('maestro/proveedores').on('value', s=>{ maestro.proveedores = s.val()||{}; renderMaestro(); renderFacturacion(); renderTesoreria(); });
   db.ref('maestro/otros').on('value', s=>{ maestro.otros = s.val()||{}; renderMaestro(); renderFacturacion(); renderTesoreria(); });
+  db.ref('maestro/categoriasClientes').on('value', s=>{
+    categoriasClientes = s.val()||{};
+    if (Object.keys(categoriasClientes).length === 0){
+      db.ref('maestro/categoriasClientes').set({ servicios:'Servicios', produccion:'Producción' });
+    }
+    renderMaestro(); renderFacturacion();
+  });
   db.ref('facturacion').on('value', s=>{ facturaciones = s.val()||{}; renderFacturacion(); });
   db.ref('tesoreria').on('value', s=>{ tesorerias = s.val()||{}; renderTesoreria(); });
 }
+
+function categoriaLabel(code){
+  return categoriasClientes[code] || code || 'Sin categoría';
+}
+function categoriaPillClass(code){
+  if (code === 'produccion') return 'produccion';
+  if (code === 'servicios') return 'servicios';
+  return 'otros';
+}
+
+/* ---------------- Edición completa de un movimiento importado ---------------- */
+
+const FACTURACION_EDIT_FIELDS = [
+  {key:'fecha', label:'Fecha', type:'date'},
+  {key:'num', label:'Número de factura', type:'text'},
+  {key:'descripcion', label:'Descripción', type:'text'},
+  {key:'cuenta', label:'Cuenta contable', type:'text'},
+  {key:'proyecto', label:'Proyecto', type:'text'},
+  {key:'subtotal', label:'Subtotal (€)', type:'number'},
+  {key:'iva', label:'IVA (€)', type:'number'},
+  {key:'retencion', label:'Retención (€)', type:'number'},
+  {key:'total', label:'Total (€)', type:'number'},
+  {key:'estado', label:'Estado', type:'text'}
+];
+const TESORERIA_EDIT_FIELDS = [
+  {key:'fecha', label:'Fecha', type:'date'},
+  {key:'cuenta', label:'Cuenta', type:'text'},
+  {key:'concepto', label:'Concepto', type:'text'},
+  {key:'importe', label:'Importe (€, negativo = pago)', type:'number'},
+  {key:'saldo', label:'Saldo (€)', type:'number'},
+  {key:'estado', label:'Estado', type:'text'}
+];
+
+let movEditCollection = null, movEditId = null, movEditFieldsDef = null;
+function openMovEditModal(collection, id, m){
+  movEditCollection = collection; movEditId = id;
+  movEditFieldsDef = collection==='facturacion' ? FACTURACION_EDIT_FIELDS : TESORERIA_EDIT_FIELDS;
+  document.getElementById('mov-edit-title').textContent = 'Editar movimiento';
+  const cont = document.getElementById('mov-edit-fields');
+  cont.innerHTML = movEditFieldsDef.map(f=>{
+    let val = m[f.key];
+    if (f.type==='date'){ val = val ? new Date(val).toISOString().slice(0,10) : ''; }
+    else if (val===undefined || val===null){ val = f.type==='number' ? 0 : ''; }
+    return `<div class="field"><label>${f.label}</label><input type="${f.type}" ${f.type==='number'?'step="0.01"':''} data-field="${f.key}" value="${escapeHtml(val)}"></div>`;
+  }).join('');
+  document.getElementById('mov-edit-modal-bg').classList.remove('hidden');
+}
+document.getElementById('mov-edit-cancel').addEventListener('click', ()=> document.getElementById('mov-edit-modal-bg').classList.add('hidden'));
+document.getElementById('mov-edit-save').addEventListener('click', ()=>{
+  const updates = {};
+  document.querySelectorAll('#mov-edit-fields [data-field]').forEach(inp=>{
+    const def = movEditFieldsDef.find(f=>f.key===inp.dataset.field);
+    let val = inp.value;
+    if (def.type==='number') val = parseFloat(val)||0;
+    else if (def.type==='date') val = val ? new Date(val+'T00:00:00').toISOString() : null;
+    updates[def.key] = val;
+  });
+  db.ref(`${movEditCollection}/${movEditId}`).update(updates).then(()=>{
+    toast('Movimiento actualizado.');
+    document.getElementById('mov-edit-modal-bg').classList.add('hidden');
+  }).catch(e=> toast('Error al guardar: '+e.message));
+});
 
 /* ---------------- Navegación de pestañas ---------------- */
 
@@ -638,16 +738,18 @@ function renderMaestroTable(tableId, dict, tipo, withCategoria){
     tr.innerHTML = `
       <td><label class="toggle"><input type="checkbox" ${item.activo!==false?'checked':''} data-toggle-activo><span></span></label></td>
       <td>${escapeHtml(item.nombre||'')}</td>
-      ${withCategoria ? `<td><span class="pill ${item.categoria==='produccion'?'produccion':'servicios'}">${item.categoria==='produccion'?'Producción':'Servicios'}</span></td>` : ''}
+      ${withCategoria ? `<td><span class="pill ${categoriaPillClass(item.categoria)}">${escapeHtml(categoriaLabel(item.categoria))}</span></td>` : ''}
       <td class="num">${euros(item.prevision||0)}</td>
       <td class="row" style="justify-content:flex-end;gap:6px;">
         <button class="btn secondary small" data-edit>Editar</button>
+        <button class="btn secondary small" data-merge>Fusionar</button>
         <button class="btn danger small" data-del>Eliminar</button>
       </td>`;
     tr.querySelector('[data-toggle-activo]').addEventListener('change', (e)=>{
       db.ref(`${maestroPathFor(tipo)}/${id}/activo`).set(e.target.checked);
     });
     tr.querySelector('[data-edit]').addEventListener('click', ()=> openMaestroModal(tipo, id, item));
+    tr.querySelector('[data-merge]').addEventListener('click', ()=> openMergeModal(tipo, id));
     tr.querySelector('[data-del]').addEventListener('click', ()=>{
       if (confirm(`¿Eliminar "${item.nombre}" de contactos? Los movimientos ya importados no se borran.`)){
         db.ref(`${maestroPathFor(tipo)}/${id}`).remove();
@@ -661,7 +763,61 @@ document.querySelectorAll('[data-add]').forEach(b=>{
   b.addEventListener('click', ()=> openMaestroModal(b.dataset.add, null, {}));
 });
 
+// ---- Fusionar contactos duplicados: reasigna todos sus movimientos y suma su previsión ----
+let mergeSourceTipo = null, mergeSourceId = null;
+function openMergeModal(tipo, sourceId){
+  const dict = tipo==='cliente'?maestro.clientes:tipo==='proveedor'?maestro.proveedores:maestro.otros;
+  const source = dict[sourceId];
+  mergeSourceTipo = tipo; mergeSourceId = sourceId;
+  document.getElementById('merge-modal-title').textContent = `Fusionar "${source.nombre}" con...`;
+  const sel = document.getElementById('merge-target-select');
+  const others = Object.entries(dict).filter(([id])=>id!==sourceId).sort((a,b)=>(a[1].nombre||'').localeCompare(b[1].nombre||''));
+  if (others.length === 0){
+    sel.innerHTML = `<option value="">No hay otro contacto de este tipo</option>`;
+  } else {
+    sel.innerHTML = others.map(([id,item])=>`<option value="${id}">${escapeHtml(item.nombre)}</option>`).join('');
+  }
+  document.getElementById('merge-modal-bg').classList.remove('hidden');
+}
+document.getElementById('merge-cancel').addEventListener('click', ()=> document.getElementById('merge-modal-bg').classList.add('hidden'));
+document.getElementById('merge-confirm').addEventListener('click', ()=>{
+  const targetId = document.getElementById('merge-target-select').value;
+  if (!targetId){ toast('Elige con quién fusionarlo.'); return; }
+  const dict = mergeSourceTipo==='cliente'?maestro.clientes:mergeSourceTipo==='proveedor'?maestro.proveedores:maestro.otros;
+  const source = dict[mergeSourceId], target = dict[targetId];
+  if (!source || !target) return;
+  const updates = {};
+  let count = 0;
+  Object.entries(facturaciones).forEach(([id,m])=>{
+    if (m.contraparteTipo===mergeSourceTipo && m.contraparteId===mergeSourceId){ updates['facturacion/'+id+'/contraparteId'] = targetId; count++; }
+  });
+  Object.entries(tesorerias).forEach(([id,m])=>{
+    if (m.contraparteTipo===mergeSourceTipo && m.contraparteId===mergeSourceId){ updates['tesoreria/'+id+'/contraparteId'] = targetId; count++; }
+  });
+  updates[`${maestroPathFor(mergeSourceTipo)}/${targetId}/prevision`] = (target.prevision||0) + (source.prevision||0);
+  updates[`${maestroPathFor(mergeSourceTipo)}/${mergeSourceId}`] = null;
+  db.ref().update(updates).then(()=>{
+    toast(`Fusionado con "${target.nombre}". ${count} movimientos reasignados.`);
+    document.getElementById('merge-modal-bg').classList.add('hidden');
+  }).catch(e=> toast('Error al fusionar: '+e.message));
+});
+
 let maestroModalTipo = null, maestroModalId = null, maestroModalCallback = null;
+function populateCategoriaSelect(selected){
+  const sel = document.getElementById('maestro-form-categoria');
+  sel.innerHTML = Object.entries(categoriasClientes).sort((a,b)=>a[1].localeCompare(b[1]))
+    .map(([code,label])=>`<option value="${code}" ${code===selected?'selected':''}>${escapeHtml(label)}</option>`).join('')
+    + `<option value="__nueva__">+ Nueva categoría</option>`;
+}
+document.getElementById('maestro-form-categoria').addEventListener('change', (e)=>{
+  if (e.target.value !== '__nueva__') return;
+  const nombre = prompt('Nombre de la nueva categoría de cliente:');
+  if (!nombre || !nombre.trim()){ populateCategoriaSelect('servicios'); return; }
+  const code = 'cat_' + uid();
+  categoriasClientes[code] = nombre.trim();
+  db.ref('maestro/categoriasClientes/'+code).set(nombre.trim());
+  populateCategoriaSelect(code);
+});
 function openMaestroModal(tipo, id, item, onSaved){
   maestroModalTipo = tipo; maestroModalId = id; maestroModalCallback = onSaved || null;
   document.getElementById('maestro-modal-title').textContent = id ? 'Editar' : 'Añadir';
@@ -670,7 +826,7 @@ function openMaestroModal(tipo, id, item, onSaved){
   const catField = document.getElementById('maestro-form-categoria-field');
   if (tipo === 'cliente'){
     catField.classList.remove('hidden');
-    document.getElementById('maestro-form-categoria').value = item.categoria || 'servicios';
+    populateCategoriaSelect(item.categoria || 'servicios');
   } else {
     catField.classList.add('hidden');
   }
@@ -746,10 +902,12 @@ function renderFacturacion(){
   });
 
   const factor = periodFactor(st.mode);
+  // Solo se compara la previsión de clientes/proveedores que ya se han importado alguna vez;
+  // si nunca se les ha subido ninguna factura, no aparecen en el informe.
+  const idsImportadosAlgunaVez = new Set(Object.values(facturaciones).map(m=>m.contraparteId).filter(Boolean));
   let previsionIngresos = 0, previsionGastos = 0;
-  Object.values(maestro.clientes||{}).forEach(c=>{ if(c.activo!==false) previsionIngresos += (c.prevision||0)*factor; });
-  Object.values(maestro.otros||{}).forEach(o=>{ if(o.activo!==false) previsionIngresos += 0; }); // otros se reparte abajo por movimiento real, no se prorratea aparte
-  Object.values(maestro.proveedores||{}).forEach(p=>{ if(p.activo!==false) previsionGastos += (p.prevision||0)*factor; });
+  Object.entries(maestro.clientes||{}).forEach(([id,c])=>{ if(c.activo!==false && idsImportadosAlgunaVez.has(id)) previsionIngresos += (c.prevision||0)*factor; });
+  Object.entries(maestro.proveedores||{}).forEach(([id,p])=>{ if(p.activo!==false && idsImportadosAlgunaVez.has(id)) previsionGastos += (p.prevision||0)*factor; });
 
   const kpis = document.getElementById('fact-kpis');
   kpis.innerHTML = '';
@@ -774,11 +932,13 @@ function renderFacturacion(){
     }
     breakdown[key].real += (m.origen==='venta' ? 1 : -1) * (Number(m.total)||0);
   });
-  // añade previsión de cada entrada de maestro activa aunque no tenga movimientos aún
+  // añade previsión de cada entrada de maestro activa, pero solo si ya se le ha importado
+  // alguna factura alguna vez — si nunca se ha importado nada suyo, no se muestra en el informe.
   ['clientes','proveedores','otros'].forEach(grp=>{
     const tipo = grp==='clientes'?'cliente':grp==='proveedores'?'proveedor':'otro';
     Object.entries(maestro[grp]||{}).forEach(([id,item])=>{
       if (item.activo===false) return;
+      if (!idsImportadosAlgunaVez.has(id)) return;
       const key = tipo+'|'+id;
       if (!breakdown[key]) breakdown[key] = { tipo, categoria:item.categoria, label:item.nombre, real:0, prevision:0 };
       breakdown[key].prevision = (item.prevision||0)*factor*(tipo==='proveedor'?-1:1);
@@ -805,9 +965,10 @@ function renderFacturacion(){
       <td>${escapeHtml(m.descripcion||'')}</td>
       <td class="num">${euros(m.total)}</td>
       <td>${escapeHtml(m.estado||'')}</td>
-      <td><button class="btn danger small" data-del>Eliminar</button></td>`;
+      <td class="row" style="gap:6px;"><button class="btn secondary small" data-edit-mov>Editar</button><button class="btn danger small" data-del>Eliminar</button></td>`;
     tr.querySelector('[data-toggle]').addEventListener('change', e=> db.ref('facturacion/'+id+'/activo').set(e.target.checked));
     tr.querySelector('[data-del]').addEventListener('click', ()=>{ if(confirm('¿Eliminar este movimiento importado?')) db.ref('facturacion/'+id).remove(); });
+    tr.querySelector('[data-edit-mov]').addEventListener('click', ()=> openMovEditModal('facturacion', id, m));
     bindCounterpartSelectFixed(tr.querySelector('[data-cp-fixed]'), tipoFijo, (t,cid)=> db.ref('facturacion/'+id).update({ contraparteTipo:t, contraparteId:cid }));
     tbody.appendChild(tr);
   });
@@ -835,8 +996,8 @@ function renderBreakdownTable(tableId, breakdown){
     return;
   }
   rows.forEach(r=>{
-    const pillClass = r.tipo==='cliente' ? (r.categoria==='produccion'?'produccion':'servicios') : r.tipo==='proveedor'?'proveedor':'otros';
-    const pillText = r.tipo==='cliente' ? (r.categoria==='produccion'?'Cliente · Producción':'Cliente · Servicios') : r.tipo==='proveedor'?'Proveedor':'Otros';
+    const pillClass = r.tipo==='cliente' ? categoriaPillClass(r.categoria) : r.tipo==='proveedor'?'proveedor':'otros';
+    const pillText = r.tipo==='cliente' ? ('Cliente · '+categoriaLabel(r.categoria)) : r.tipo==='proveedor'?'Proveedor':'Otros';
     const diff = r.real - r.prevision;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><span class="pill ${pillClass}">${pillText}</span></td>
@@ -953,9 +1114,12 @@ function renderTesoreria(){
   });
 
   const factor = periodFactor(st.mode);
+  // Igual que en Facturación: solo se compara la previsión de quien ya tenga algún
+  // movimiento de tesorería importado alguna vez.
+  const idsConMovTesoreria = new Set(Object.values(tesorerias).map(m=>m.contraparteId).filter(Boolean));
   let previsionCobros = 0, previsionPagos = 0;
-  Object.values(maestro.clientes||{}).forEach(c=>{ if(c.activo!==false) previsionCobros += (c.prevision||0)*factor; });
-  Object.values(maestro.proveedores||{}).forEach(p=>{ if(p.activo!==false) previsionPagos += (p.prevision||0)*factor; });
+  Object.entries(maestro.clientes||{}).forEach(([id,c])=>{ if(c.activo!==false && idsConMovTesoreria.has(id)) previsionCobros += (c.prevision||0)*factor; });
+  Object.entries(maestro.proveedores||{}).forEach(([id,p])=>{ if(p.activo!==false && idsConMovTesoreria.has(id)) previsionPagos += (p.prevision||0)*factor; });
 
   // último saldo conocido del periodo (si el excel lo trae)
   const conSaldo = activos.filter(([id,m])=> m.saldo !== undefined && m.saldo !== null).sort((a,b)=> new Date(a[1].fecha)-new Date(b[1].fecha));
@@ -983,6 +1147,7 @@ function renderTesoreria(){
     const tipo = grp==='clientes'?'cliente':'proveedor';
     Object.entries(maestro[grp]||{}).forEach(([id,item])=>{
       if (item.activo===false) return;
+      if (!idsConMovTesoreria.has(id)) return;
       const key = tipo+'|'+id;
       if (!breakdown[key]) breakdown[key] = { tipo, categoria:item.categoria, label:item.nombre, real:0, prevision:0 };
       breakdown[key].prevision = (item.prevision||0)*factor*(tipo==='proveedor'?-1:1);
@@ -1005,9 +1170,10 @@ function renderTesoreria(){
       <td>${escapeHtml(m.concepto||'')}</td>
       <td class="num" style="color:${(m.importe||0)>=0?'var(--brand)':'var(--red)'}">${euros(m.importe)}</td>
       <td class="num">${m.saldo!==undefined&&m.saldo!==null?euros(m.saldo):'—'}</td>
-      <td><button class="btn danger small" data-del>Eliminar</button></td>`;
+      <td class="row" style="gap:6px;"><button class="btn secondary small" data-edit-mov>Editar</button><button class="btn danger small" data-del>Eliminar</button></td>`;
     tr.querySelector('[data-toggle]').addEventListener('change', e=> db.ref('tesoreria/'+id+'/activo').set(e.target.checked));
     tr.querySelector('[data-del]').addEventListener('click', ()=>{ if(confirm('¿Eliminar este movimiento importado?')) db.ref('tesoreria/'+id).remove(); });
+    tr.querySelector('[data-edit-mov]').addEventListener('click', ()=> openMovEditModal('tesoreria', id, m));
     bindContraparteSelect(tr, 'tesoreria', id);
     tbody.appendChild(tr);
   });
@@ -1192,7 +1358,12 @@ function showFacturacionPreview(rows){
       <td class="num">${euros(r.total)}</td>`;
     tr.querySelector('[data-include]').addEventListener('change', e=> r._include = e.target.checked);
     r._include = !r._duplicado;
-    bindCounterpartSelectFixed(tr.querySelector('[data-cp-fixed]'), tipoFijo, (t,cid)=>{ r.contraparteTipo=t; r.contraparteId=cid; });
+    // Al asignar (o crear) un cliente/proveedor en esta fila, se aplica automáticamente
+    // a todas las demás filas de esta misma importación que traigan idéntico nombre de
+    // Holded, para no tener que repetirlo factura a factura ni generar duplicados.
+    bindCounterpartSelectFixed(tr.querySelector('[data-cp-fixed]'), tipoFijo, (t,cid)=>{
+      applyAssignmentToMatchingRows(rows, r.contraparteNombreOriginal, tipoFijo, t, cid);
+    });
     tbody.appendChild(tr);
   });
 }
@@ -1249,6 +1420,8 @@ function processTesoreriaSheet(rows){
       const row = rows[i];
       if (isFooterOrBlankRow(row)) break;
       if (row[idxFecha]===null && row[idxDesc]===null) continue;
+      // Fila sin importe real (p.ej. una línea de encabezado de saldo colada en medio de la tabla)
+      if (row[idxImporte]===null || row[idxImporte]==='') continue;
       const fecha = parseExcelDate(row[idxFecha]);
       const importe = parseEsNumber(row[idxImporte]);
       const saldo = idxSaldo>-1 ? parseEsNumber(row[idxSaldo]) : null;
@@ -1277,6 +1450,8 @@ function processTesoreriaSheet(rows){
       const row = rows[i];
       if (isFooterOrBlankRow(row)) break;
       if (row[idxFecha]===null && row[idxDesc]===null) continue;
+      // Fila sin Debe ni Haber (p.ej. una línea de subtotal o de saldo colada en medio de la tabla)
+      if ((row[idxDebe]===null || row[idxDebe]==='') && (row[idxHaber]===null || row[idxHaber]==='')) continue;
       const fecha = parseExcelDate(row[idxFecha]);
       const debe = parseEsNumber(row[idxDebe]);
       const haber = parseEsNumber(row[idxHaber]);
@@ -1306,6 +1481,27 @@ function processTesoreriaSheet(rows){
 }
 
 function hashRow(parts){ return parts.map(p=>String(p)).join('~'); }
+
+// Cuando se asigna (o se crea) un cliente/proveedor en una fila de la vista previa,
+// aplica la misma asignación a todas las filas de este lote con idéntico nombre original
+// de Holded, y refresca sus desplegables en pantalla para que se vea al momento.
+function applyAssignmentToMatchingRows(rows, originalName, tipoFijo, tipo, id){
+  const targetNorm = normalizeName(originalName);
+  rows.forEach(r=>{
+    if (normalizeName(r.contraparteNombreOriginal) === targetNorm){
+      r.contraparteTipo = tipo;
+      r.contraparteId = id;
+    }
+  });
+  const selects = document.querySelectorAll('#import-preview-table [data-cp-fixed]');
+  selects.forEach((sel, idx)=>{
+    const r2 = rows[idx];
+    if (r2 && normalizeName(r2.contraparteNombreOriginal) === targetNorm){
+      sel.innerHTML = counterpartOptionsFixed(tipoFijo, tipo, id, null);
+      sel.value = (tipo && id) ? `${tipo}:${id}` : '';
+    }
+  });
+}
 
 function showTesoreriaPreview(rows){
   importCtx.rows = rows;
