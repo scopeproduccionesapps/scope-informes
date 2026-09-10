@@ -283,11 +283,14 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
       <div class="panel">
         <div class="panel-head">
           <h2>Clientes</h2>
-          <button class="btn" data-add="cliente">+ Añadir cliente</button>
+          <div class="row" style="gap:8px;">
+            <button class="btn secondary" id="merge-bulk-cliente" disabled>Fusionar seleccionados</button>
+            <button class="btn" data-add="cliente">+ Añadir cliente</button>
+          </div>
         </div>
         <div class="table-wrap">
           <table class="data" id="maestro-clientes-table">
-            <thead><tr><th>Activo</th><th>Nombre</th><th>Categoría</th><th class="num">Previsión mensual</th><th></th></tr></thead>
+            <thead><tr><th><input type="checkbox" data-select-all="cliente"></th><th>Activo</th><th>Nombre</th><th>Categoría</th><th class="num">Previsión mensual</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -296,11 +299,14 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
       <div class="panel">
         <div class="panel-head">
           <h2>Proveedores</h2>
-          <button class="btn" data-add="proveedor">+ Añadir proveedor</button>
+          <div class="row" style="gap:8px;">
+            <button class="btn secondary" id="merge-bulk-proveedor" disabled>Fusionar seleccionados</button>
+            <button class="btn" data-add="proveedor">+ Añadir proveedor</button>
+          </div>
         </div>
         <div class="table-wrap">
           <table class="data" id="maestro-proveedores-table">
-            <thead><tr><th>Activo</th><th>Nombre</th><th class="num">Previsión mensual</th><th></th></tr></thead>
+            <thead><tr><th><input type="checkbox" data-select-all="proveedor"></th><th>Activo</th><th>Nombre</th><th class="num">Previsión mensual</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -309,11 +315,14 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
       <div class="panel">
         <div class="panel-head">
           <h2>Otros</h2>
-          <button class="btn" data-add="otro">+ Añadir</button>
+          <div class="row" style="gap:8px;">
+            <button class="btn secondary" id="merge-bulk-otro" disabled>Fusionar seleccionados</button>
+            <button class="btn" data-add="otro">+ Añadir</button>
+          </div>
         </div>
         <div class="table-wrap">
           <table class="data" id="maestro-otros-table">
-            <thead><tr><th>Activo</th><th>Nombre</th><th class="num">Previsión mensual</th><th></th></tr></thead>
+            <thead><tr><th><input type="checkbox" data-select-all="otro"></th><th>Activo</th><th>Nombre</th><th class="num">Previsión mensual</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -383,11 +392,11 @@ select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px
 
 <!-- ===================== FUSIONAR CONTACTOS DUPLICADOS ===================== -->
 <div class="modal-bg hidden" id="merge-modal-bg">
-  <div class="modal" style="max-width:420px;">
+  <div class="modal" style="max-width:460px;">
     <h3 id="merge-modal-title">Fusionar</h3>
-    <p class="muted">Todos sus movimientos importados (Facturación y Tesorería) pasarán al contacto que elijas, y la previsión mensual se sumará. Este contacto duplicado se eliminará.</p>
+    <p class="muted" id="merge-modal-desc">Todos sus movimientos importados (Facturación y Tesorería) pasarán al contacto que elijas, y la previsión mensual se sumará en él. Los duplicados se eliminarán.</p>
     <div class="field">
-      <label>Fusionar con</label>
+      <label>Mantener y fusionar todos en</label>
       <select id="merge-target-select"></select>
     </div>
     <div class="modal-actions">
@@ -714,6 +723,9 @@ function periodFactor(mode){
 
 /* ---------------- MAESTRO: render y edición ---------------- */
 
+// Selección de contactos marcados para fusionar, por tipo
+const mergeSelection = { cliente: new Set(), proveedor: new Set(), otro: new Set() };
+
 function renderMaestro(){
   renderMaestroTable('maestro-clientes-table', maestro.clientes, 'cliente', true);
   renderMaestroTable('maestro-proveedores-table', maestro.proveedores, 'proveedor', false);
@@ -724,32 +736,48 @@ function maestroPathFor(tipo){
   return tipo === 'cliente' ? 'maestro/clientes' : tipo === 'proveedor' ? 'maestro/proveedores' : 'maestro/otros';
 }
 
+function updateMergeBulkButton(tipo){
+  const btn = document.getElementById('merge-bulk-'+tipo);
+  const n = mergeSelection[tipo].size;
+  btn.disabled = n < 2;
+  btn.textContent = n > 0 ? `Fusionar seleccionados (${n})` : 'Fusionar seleccionados';
+}
+
 function renderMaestroTable(tableId, dict, tipo, withCategoria){
+  // limpia de la selección cualquier id que ya no exista (p.ej. tras una fusión)
+  for (const id of Array.from(mergeSelection[tipo])){
+    if (!dict || !dict[id]) mergeSelection[tipo].delete(id);
+  }
+  updateMergeBulkButton(tipo);
+
   const tbody = document.querySelector('#'+tableId+' tbody');
   tbody.innerHTML = '';
   const entries = Object.entries(dict||{}).sort((a,b)=> (a[1].nombre||'').localeCompare(b[1].nombre||''));
   if (entries.length === 0){
-    tbody.innerHTML = `<tr><td colspan="${withCategoria?5:4}" class="empty-state">Todavía no hay ninguno. Añádelo con el botón de arriba.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${withCategoria?6:5}" class="empty-state">Todavía no hay ninguno. Añádelo con el botón de arriba.</td></tr>`;
     return;
   }
   for (const [id, item] of entries){
     const tr = document.createElement('tr');
     if (item.activo === false) tr.classList.add('inactive');
     tr.innerHTML = `
+      <td><input type="checkbox" data-select-merge ${mergeSelection[tipo].has(id)?'checked':''}></td>
       <td><label class="toggle"><input type="checkbox" ${item.activo!==false?'checked':''} data-toggle-activo><span></span></label></td>
       <td>${escapeHtml(item.nombre||'')}</td>
       ${withCategoria ? `<td><span class="pill ${categoriaPillClass(item.categoria)}">${escapeHtml(categoriaLabel(item.categoria))}</span></td>` : ''}
       <td class="num">${euros(item.prevision||0)}</td>
       <td class="row" style="justify-content:flex-end;gap:6px;">
         <button class="btn secondary small" data-edit>Editar</button>
-        <button class="btn secondary small" data-merge>Fusionar</button>
         <button class="btn danger small" data-del>Eliminar</button>
       </td>`;
+    tr.querySelector('[data-select-merge]').addEventListener('change', (e)=>{
+      if (e.target.checked) mergeSelection[tipo].add(id); else mergeSelection[tipo].delete(id);
+      updateMergeBulkButton(tipo);
+    });
     tr.querySelector('[data-toggle-activo]').addEventListener('change', (e)=>{
       db.ref(`${maestroPathFor(tipo)}/${id}/activo`).set(e.target.checked);
     });
     tr.querySelector('[data-edit]').addEventListener('click', ()=> openMaestroModal(tipo, id, item));
-    tr.querySelector('[data-merge]').addEventListener('click', ()=> openMergeModal(tipo, id));
     tr.querySelector('[data-del]').addEventListener('click', ()=>{
       if (confirm(`¿Eliminar "${item.nombre}" de contactos? Los movimientos ya importados no se borran.`)){
         db.ref(`${maestroPathFor(tipo)}/${id}`).remove();
@@ -763,41 +791,64 @@ document.querySelectorAll('[data-add]').forEach(b=>{
   b.addEventListener('click', ()=> openMaestroModal(b.dataset.add, null, {}));
 });
 
-// ---- Fusionar contactos duplicados: reasigna todos sus movimientos y suma su previsión ----
-let mergeSourceTipo = null, mergeSourceId = null;
-function openMergeModal(tipo, sourceId){
+document.querySelectorAll('[data-select-all]').forEach(cb=>{
+  cb.addEventListener('change', (e)=>{
+    const tipo = e.target.dataset.selectAll;
+    const dict = tipo==='cliente'?maestro.clientes:tipo==='proveedor'?maestro.proveedores:maestro.otros;
+    if (e.target.checked) Object.keys(dict||{}).forEach(id=>mergeSelection[tipo].add(id));
+    else mergeSelection[tipo].clear();
+    renderMaestro();
+  });
+});
+
+// ---- Fusionar varios contactos duplicados a la vez: reasigna todos sus movimientos
+// (Facturación y Tesorería) al contacto elegido, suma sus previsiones, y borra los demás.
+let mergeBulkTipo = null;
+function openBulkMergeModal(tipo){
+  const ids = Array.from(mergeSelection[tipo]);
+  if (ids.length < 2){ toast('Marca al menos dos contactos para fusionar.'); return; }
+  mergeBulkTipo = tipo;
   const dict = tipo==='cliente'?maestro.clientes:tipo==='proveedor'?maestro.proveedores:maestro.otros;
-  const source = dict[sourceId];
-  mergeSourceTipo = tipo; mergeSourceId = sourceId;
-  document.getElementById('merge-modal-title').textContent = `Fusionar "${source.nombre}" con...`;
+  const nombres = ids.map(id=> dict[id] ? dict[id].nombre : '?');
+  document.getElementById('merge-modal-title').textContent = `Fusionar ${ids.length} contactos`;
+  document.getElementById('merge-modal-desc').textContent =
+    `Se van a combinar: ${nombres.join(', ')}. Todos sus movimientos importados (Facturación y Tesorería) pasarán al contacto que elijas abajo, sus previsiones se sumarán en él, y los demás se eliminarán.`;
   const sel = document.getElementById('merge-target-select');
-  const others = Object.entries(dict).filter(([id])=>id!==sourceId).sort((a,b)=>(a[1].nombre||'').localeCompare(b[1].nombre||''));
-  if (others.length === 0){
-    sel.innerHTML = `<option value="">No hay otro contacto de este tipo</option>`;
-  } else {
-    sel.innerHTML = others.map(([id,item])=>`<option value="${id}">${escapeHtml(item.nombre)}</option>`).join('');
-  }
+  sel.innerHTML = ids.map(id=>`<option value="${id}">${escapeHtml(dict[id].nombre)}</option>`).join('');
   document.getElementById('merge-modal-bg').classList.remove('hidden');
 }
+document.getElementById('merge-bulk-cliente').addEventListener('click', ()=> openBulkMergeModal('cliente'));
+document.getElementById('merge-bulk-proveedor').addEventListener('click', ()=> openBulkMergeModal('proveedor'));
+document.getElementById('merge-bulk-otro').addEventListener('click', ()=> openBulkMergeModal('otro'));
+
 document.getElementById('merge-cancel').addEventListener('click', ()=> document.getElementById('merge-modal-bg').classList.add('hidden'));
 document.getElementById('merge-confirm').addEventListener('click', ()=>{
   const targetId = document.getElementById('merge-target-select').value;
   if (!targetId){ toast('Elige con quién fusionarlo.'); return; }
-  const dict = mergeSourceTipo==='cliente'?maestro.clientes:mergeSourceTipo==='proveedor'?maestro.proveedores:maestro.otros;
-  const source = dict[mergeSourceId], target = dict[targetId];
-  if (!source || !target) return;
+  const tipo = mergeBulkTipo;
+  const dict = tipo==='cliente'?maestro.clientes:tipo==='proveedor'?maestro.proveedores:maestro.otros;
+  const sourceIds = Array.from(mergeSelection[tipo]).filter(id=>id!==targetId);
+  const target = dict[targetId];
+  if (!target || sourceIds.length===0) return;
   const updates = {};
   let count = 0;
-  Object.entries(facturaciones).forEach(([id,m])=>{
-    if (m.contraparteTipo===mergeSourceTipo && m.contraparteId===mergeSourceId){ updates['facturacion/'+id+'/contraparteId'] = targetId; count++; }
+  let previsionExtra = 0;
+  sourceIds.forEach(sourceId=>{
+    const source = dict[sourceId];
+    if (!source) return;
+    previsionExtra += (source.prevision||0);
+    Object.entries(facturaciones).forEach(([id,m])=>{
+      if (m.contraparteTipo===tipo && m.contraparteId===sourceId){ updates['facturacion/'+id+'/contraparteId'] = targetId; count++; }
+    });
+    Object.entries(tesorerias).forEach(([id,m])=>{
+      if (m.contraparteTipo===tipo && m.contraparteId===sourceId){ updates['tesoreria/'+id+'/contraparteId'] = targetId; count++; }
+    });
+    updates[`${maestroPathFor(tipo)}/${sourceId}`] = null;
   });
-  Object.entries(tesorerias).forEach(([id,m])=>{
-    if (m.contraparteTipo===mergeSourceTipo && m.contraparteId===mergeSourceId){ updates['tesoreria/'+id+'/contraparteId'] = targetId; count++; }
-  });
-  updates[`${maestroPathFor(mergeSourceTipo)}/${targetId}/prevision`] = (target.prevision||0) + (source.prevision||0);
-  updates[`${maestroPathFor(mergeSourceTipo)}/${mergeSourceId}`] = null;
+  updates[`${maestroPathFor(tipo)}/${targetId}/prevision`] = (target.prevision||0) + previsionExtra;
   db.ref().update(updates).then(()=>{
-    toast(`Fusionado con "${target.nombre}". ${count} movimientos reasignados.`);
+    toast(`Fusionados en "${target.nombre}". ${count} movimientos reasignados.`);
+    mergeSelection[tipo].clear();
     document.getElementById('merge-modal-bg').classList.add('hidden');
   }).catch(e=> toast('Error al fusionar: '+e.message));
 });
