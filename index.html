@@ -125,7 +125,9 @@ table.data td.num{text-align:right;font-variant-numeric:tabular-nums;}
 .toggle input:checked + span:before{transform:translateX(15px);}
 
 input.inline-num{width:110px;border:1px solid var(--line);border-radius:6px;padding:5px 7px;text-align:right;}
-select.inline-sel{border:1px solid var(--line);border-radius:6px;padding:5px 7px;}
+select.inline-sel{display:block;width:100%;min-width:150px;max-width:190px;border:1px solid var(--line);border-radius:6px;padding:5px 7px;margin-top:3px;}
+select.inline-sel:first-child{margin-top:0;}
+td.truncate{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
 /* ---- Modal ---- */
 .modal-bg{position:fixed;inset:0;background:rgba(20,25,20,.45);display:flex;align-items:flex-start;justify-content:center;z-index:100;padding:30px 16px;overflow:auto;}
@@ -628,7 +630,10 @@ function openMovEditModal(collection, id, m){
   cont.innerHTML = movEditFieldsDef.map(f=>{
     let val = m[f.key];
     if (f.type==='date'){ val = val ? new Date(val).toISOString().slice(0,10) : ''; }
-    else if (val===undefined || val===null){ val = f.type==='number' ? 0 : ''; }
+    else if (val===undefined || val===null || val===''){
+      if (collection==='tesoreria' && f.key==='cuenta'){ val = m.origenFormato==='banco' ? 'Banco' : 'Caja'; }
+      else val = f.type==='number' ? 0 : '';
+    }
     return `<div class="field"><label>${f.label}</label><input type="${f.type}" ${f.type==='number'?'step="0.01"':''} data-field="${f.key}" value="${escapeHtml(val)}"></div>`;
   }).join('');
   document.getElementById('mov-edit-modal-bg').classList.remove('hidden');
@@ -874,13 +879,9 @@ function openMaestroModal(tipo, id, item, onSaved){
   document.getElementById('maestro-modal-title').textContent = id ? 'Editar' : 'Añadir';
   document.getElementById('maestro-form-nombre').value = item.nombre || '';
   document.getElementById('maestro-form-prevision').value = item.prevision || 0;
-  const catField = document.getElementById('maestro-form-categoria-field');
-  if (tipo === 'cliente'){
-    catField.classList.remove('hidden');
-    populateCategoriaSelect(item.categoria || 'servicios');
-  } else {
-    catField.classList.add('hidden');
-  }
+  // La categoría se ofrece igual para clientes, proveedores y otros
+  document.getElementById('maestro-form-categoria-field').classList.remove('hidden');
+  populateCategoriaSelect(item.categoria || 'servicios');
   document.getElementById('maestro-modal-bg').classList.remove('hidden');
   document.getElementById('maestro-form-nombre').focus();
 }
@@ -896,7 +897,7 @@ document.getElementById('maestro-form-save').addEventListener('click', ()=>{
     prevision: parseFloat(document.getElementById('maestro-form-prevision').value)||0,
     activo: true
   };
-  if (maestroModalTipo === 'cliente') data.categoria = document.getElementById('maestro-form-categoria').value;
+  data.categoria = document.getElementById('maestro-form-categoria').value;
   const path = maestroPathFor(maestroModalTipo);
   const id = maestroModalId || uid();
   db.ref(`${path}/${id}`).update(data).then(()=>{
@@ -953,12 +954,13 @@ function renderFacturacion(){
   });
 
   const factor = periodFactor(st.mode);
-  // Solo se compara la previsión de clientes/proveedores que ya se han importado alguna vez;
-  // si nunca se les ha subido ninguna factura, no aparecen en el informe.
-  const idsImportadosAlgunaVez = new Set(Object.values(facturaciones).map(m=>m.contraparteId).filter(Boolean));
+  // Solo se compara la previsión de clientes/proveedores que tienen algún movimiento
+  // importado EN ESTE PERIODO concreto (no basta con que se les haya importado algo
+  // en otro mes) — así no aparecen con "0,00 €" en meses sin datos suyos.
+  const idsConDatosEsteMes = new Set(movs.map(([id,m])=>m.contraparteId).filter(Boolean));
   let previsionIngresos = 0, previsionGastos = 0;
-  Object.entries(maestro.clientes||{}).forEach(([id,c])=>{ if(c.activo!==false && idsImportadosAlgunaVez.has(id)) previsionIngresos += (c.prevision||0)*factor; });
-  Object.entries(maestro.proveedores||{}).forEach(([id,p])=>{ if(p.activo!==false && idsImportadosAlgunaVez.has(id)) previsionGastos += (p.prevision||0)*factor; });
+  Object.entries(maestro.clientes||{}).forEach(([id,c])=>{ if(c.activo!==false && idsConDatosEsteMes.has(id)) previsionIngresos += (c.prevision||0)*factor; });
+  Object.entries(maestro.proveedores||{}).forEach(([id,p])=>{ if(p.activo!==false && idsConDatosEsteMes.has(id)) previsionGastos += (p.prevision||0)*factor; });
 
   const kpis = document.getElementById('fact-kpis');
   kpis.innerHTML = '';
@@ -983,13 +985,14 @@ function renderFacturacion(){
     }
     breakdown[key].real += (m.origen==='venta' ? 1 : -1) * (Number(m.total)||0);
   });
-  // añade previsión de cada entrada de maestro activa, pero solo si ya se le ha importado
-  // alguna factura alguna vez — si nunca se ha importado nada suyo, no se muestra en el informe.
+  // añade previsión de cada entrada de maestro activa, pero solo si tiene algún
+  // movimiento importado en ESTE periodo — si este mes no se le ha importado nada,
+  // no se muestra (aunque sí se le haya importado algo en otro mes).
   ['clientes','proveedores','otros'].forEach(grp=>{
     const tipo = grp==='clientes'?'cliente':grp==='proveedores'?'proveedor':'otro';
     Object.entries(maestro[grp]||{}).forEach(([id,item])=>{
       if (item.activo===false) return;
-      if (!idsImportadosAlgunaVez.has(id)) return;
+      if (!idsConDatosEsteMes.has(id)) return;
       const key = tipo+'|'+id;
       if (!breakdown[key]) breakdown[key] = { tipo, categoria:item.categoria, label:item.nombre, real:0, prevision:0 };
       breakdown[key].prevision = (item.prevision||0)*factor*(tipo==='proveedor'?-1:1);
@@ -1013,7 +1016,7 @@ function renderFacturacion(){
       <td>${escapeHtml(m.num||'')}</td>
       <td><span class="pill ${m.origen==='venta'?'servicios':'proveedor'}">${m.origen==='venta'?'Venta':'Compra'}</span></td>
       <td>${counterpartSelectHtmlFixed(tipoFijo, m.contraparteTipo, m.contraparteId, m.contraparteNombreOriginal)}</td>
-      <td>${escapeHtml(m.descripcion||'')}</td>
+      <td class="truncate" title="${escapeHtml(m.descripcion||'')}">${escapeHtml(m.descripcion||'')}</td>
       <td class="num">${euros(m.total)}</td>
       <td>${escapeHtml(m.estado||'')}</td>
       <td class="row" style="gap:6px;"><button class="btn secondary small" data-edit-mov>Editar</button><button class="btn danger small" data-del>Eliminar</button></td>`;
@@ -1071,10 +1074,11 @@ function contraparteSelectHtml(tipo, id, original){
 }
 function contraparteOptions(tipo, selectedId, original){
   const dict = tipo==='cliente'?maestro.clientes:tipo==='proveedor'?maestro.proveedores:maestro.otros;
-  let html = `<option value="">${original?escapeHtml(original)+' (sin asignar)':'— elegir —'}</option>`;
+  let html = `<option value="">— sin asignar —</option>`;
   Object.entries(dict||{}).sort((a,b)=>(a[1].nombre||'').localeCompare(b[1].nombre||'')).forEach(([id,item])=>{
     html += `<option value="${id}" ${id===selectedId?'selected':''}>${escapeHtml(item.nombre)}</option>`;
   });
+  html += `<option value="__nuevo__">+ Nuevo ${tipo==='cliente'?'cliente':tipo==='proveedor'?'proveedor':'otro'}</option>`;
   return html;
 }
 function bindContraparteSelect(tr, collection, movId){
@@ -1085,6 +1089,15 @@ function bindContraparteSelect(tr, collection, movId){
     db.ref(`${collection}/${movId}`).update({ contraparteTipo: tipoSel.value, contraparteId: null });
   });
   idSel.addEventListener('change', ()=>{
+    if (idSel.value === '__nuevo__'){
+      idSel.value = '';
+      openMaestroModal(tipoSel.value, null, {}, (savedTipo, newId)=>{
+        idSel.innerHTML = contraparteOptions(savedTipo, newId, null);
+        idSel.value = newId;
+        db.ref(`${collection}/${movId}`).update({ contraparteTipo: savedTipo, contraparteId: newId });
+      });
+      return;
+    }
     db.ref(`${collection}/${movId}`).update({ contraparteTipo: tipoSel.value, contraparteId: idSel.value || null });
   });
 }
@@ -1165,9 +1178,9 @@ function renderTesoreria(){
   });
 
   const factor = periodFactor(st.mode);
-  // Igual que en Facturación: solo se compara la previsión de quien ya tenga algún
-  // movimiento de tesorería importado alguna vez.
-  const idsConMovTesoreria = new Set(Object.values(tesorerias).map(m=>m.contraparteId).filter(Boolean));
+  // Igual que en Facturación: solo se compara la previsión de quien tenga algún
+  // movimiento de tesorería importado en ESTE periodo concreto.
+  const idsConMovTesoreria = new Set(movs.map(([id,m])=>m.contraparteId).filter(Boolean));
   let previsionCobros = 0, previsionPagos = 0;
   Object.entries(maestro.clientes||{}).forEach(([id,c])=>{ if(c.activo!==false && idsConMovTesoreria.has(id)) previsionCobros += (c.prevision||0)*factor; });
   Object.entries(maestro.proveedores||{}).forEach(([id,p])=>{ if(p.activo!==false && idsConMovTesoreria.has(id)) previsionPagos += (p.prevision||0)*factor; });
@@ -1218,7 +1231,7 @@ function renderTesoreria(){
       <td>${fmtDate(m.fecha)}</td>
       <td><span class="pill otros">${escapeHtml(m.cuenta||(m.origenFormato==='banco'?'Banco':'Caja'))}</span></td>
       <td>${contraparteSelectHtml(m.contraparteTipo, m.contraparteId, m.contraparteNombreOriginal)}</td>
-      <td>${escapeHtml(m.concepto||'')}</td>
+      <td class="truncate" title="${escapeHtml(m.concepto||'')}">${escapeHtml(m.concepto||'')}</td>
       <td class="num" style="color:${(m.importe||0)>=0?'var(--brand)':'var(--red)'}">${euros(m.importe)}</td>
       <td class="num">${m.saldo!==undefined&&m.saldo!==null?euros(m.saldo):'—'}</td>
       <td class="row" style="gap:6px;"><button class="btn secondary small" data-edit-mov>Editar</button><button class="btn danger small" data-del>Eliminar</button></td>`;
@@ -1580,7 +1593,18 @@ function showTesoreriaPreview(rows){
     const tipoSel = tr.querySelector('[data-cp-tipo]');
     const idSel = tr.querySelector('[data-cp-id]');
     tipoSel.addEventListener('change', ()=>{ idSel.innerHTML = contraparteOptions(tipoSel.value,null,null); r.contraparteTipo = tipoSel.value; r.contraparteId=null; });
-    idSel.addEventListener('change', ()=>{ r.contraparteId = idSel.value || null; });
+    idSel.addEventListener('change', ()=>{
+      if (idSel.value === '__nuevo__'){
+        idSel.value = '';
+        openMaestroModal(tipoSel.value, null, {}, (savedTipo, newId)=>{
+          idSel.innerHTML = contraparteOptions(savedTipo, newId, null);
+          idSel.value = newId;
+          r.contraparteTipo = savedTipo; r.contraparteId = newId;
+        });
+        return;
+      }
+      r.contraparteId = idSel.value || null;
+    });
     tbody.appendChild(tr);
   });
 }
